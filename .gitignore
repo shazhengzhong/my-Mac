@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# 备份文件
+*.bak
+
+# PDF 预览图
+pdf_preview*.png
+preview_*.png
+
+# 数据库（包含业务数据）
+waybills.db
+
+# macOS
+.DS_Store
