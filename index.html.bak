@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>常熟市中伟物流有限公司 - 运输单打印</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "SimSun", "Microsoft YaHei", sans-serif; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .toolbar { background: #fff; padding: 15px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+        .toolbar label { font-weight: bold; }
+        .toolbar select, .toolbar input { padding: 5px; border: 1px solid #ddd; border-radius: 3px; }
+        .toolbar button { padding: 8px 15px; border: none; border-radius: 3px; cursor: pointer; color: white; }
+        .btn-print { background: #4CAF50; }
+        .btn-clear { background: #2196F3; }
+        .btn-history { background: #FF9800; }
+        .waybill { background: #fff; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .waybill-header { display: flex; justify-content: center; align-items: center; margin-bottom: 15px; position: relative; }
+        .waybill-title { font-size: 28px; font-weight: bold; font-family: "SimHei", "Microsoft YaHei"; }
+        .waybill-number { font-size: 20px; color: #CC0000; font-weight: bold; position: absolute; right: 0; }
+        .waybill-table { width: 100%; border-collapse: collapse; border: 2px solid #000; }
+        .waybill-table td, .waybill-table th { border: 1px solid #000; padding: 5px 4px; font-size: 12px; }
+        .waybill-table th { background: #f5f5f5; font-weight: bold; }
+        .waybill-table input { width: 100%; border: none; padding: 3px; font-size: 12px; font-family: inherit; background: transparent; }
+        .waybill-table input:focus { outline: 2px solid #4CAF50; background: #fff; }
+        .waybill-table input[type="number"] { text-align: right; }
+        .label-cell { background: #f5f5f5; font-weight: bold; text-align: center; white-space: nowrap; }
+        .no-border-row td { border: none !important; padding: 5px 10px; }
+        .cargo-header { text-align: center; font-weight: bold; }
+        .terms-cell { vertical-align: top; padding: 8px; }
+        .terms-text { font-size: 11px; line-height: 1.6; }
+        .signature-cell { height: 70px; vertical-align: bottom; text-align: center; font-weight: bold; }
+        .history-panel { background: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none; }
+        .history-panel.active { display: block; }
+        .history-table { width: 100%; border-collapse: collapse; }
+        .history-table th, .history-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .history-table th { background: #f0f0f0; }
+        .history-table tr:hover { background: #f5f5f5; cursor: pointer; }
+        .history-table button { padding: 5px 10px; border: none; border-radius: 3px; background: #4CAF50; color: white; cursor: pointer; }
+        .message { padding: 10px; border-radius: 4px; margin: 10px 0; display: none; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="toolbar">
+            <label>打印机:</label>
+            <select id="printer" style="width:250px"></select>
+            <label>份数:</label>
+            <input type="number" id="copies" value="1" min="1" max="10" style="width:60px">
+            <button class="btn-print" onclick="saveAndPrint()">保存并打印</button>
+            <button class="btn-clear" onclick="clearForm()">清空</button>
+            <button class="btn-history" onclick="toggleHistory()">历史记录</button>
+            <button class="btn-history" onclick="loadPrinters()">刷新打印机</button>
+        </div>
+        <div id="msg" class="message"></div>
+        <div id="waybill-panel" class="waybill">
+            <div class="waybill-header">
+                <div class="waybill-title">常熟市中伟物流有限公司</div>
+                <div class="waybill-number">№ <input type="text" id="waybill_no" value="0001030" style="width:80px;color:#CC0000;font-weight:bold;font-size:18px;border:none;text-align:right"></div>
+            </div>
+            <table class="waybill-table">
+                <tr class="no-border-row">
+                    <td colspan="10">
+                        <div style="display:flex;justify-content:space-between;">
+                            <span><strong>始发站：</strong><input type="text" id="departure_station" style="width:120px;display:inline"></span>
+                            <span><strong>到达站：</strong><input type="text" id="arrival_station" style="width:120px;display:inline"></span>
+                            <span><strong>日期：</strong><input type="text" id="date" style="width:150px;display:inline"></span>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label-cell">托运单位</td>
+                    <td colspan="2"><input type="text" id="shipper"></td>
+                    <td class="label-cell">单位地址</td>
+                    <td colspan="2"><input type="text" id="shipper_address"></td>
+                    <td class="label-cell">电话</td>
+                    <td colspan="3"><input type="text" id="shipper_phone"></td>
+                </tr>
+                <tr>
+                    <td class="label-cell">收货单位</td>
+                    <td colspan="2"><input type="text" id="receiver"></td>
+                    <td class="label-cell">单位地址</td>
+                    <td colspan="6"><input type="text" id="receiver_address"></td>
+                </tr>
+                <tr>
+                    <td class="label-cell" colspan="2">联系人/电话</td>
+                    <td colspan="8"><input type="text" id="contact"></td>
+                </tr>
+                <tr>
+                    <th class="cargo-header">货物名称</th><th class="cargo-header">包装</th><th class="cargo-header">数量</th>
+                    <th class="cargo-header">重量/体积</th><th class="cargo-header">运费(元)</th><th class="cargo-header">提货费</th>
+                    <th class="cargo-header">送货费</th><th class="cargo-header">货物保价</th><th class="cargo-header">保险费(元)</th><th class="cargo-header">合计金额</th>
+                </tr>
+                <tr>
+                    <td><input type="text" class="cargo-name"></td><td><input type="text" class="cargo-package"></td>
+                    <td><input type="text" class="cargo-quantity"></td><td><input type="text" class="cargo-weight"></td>
+                    <td><input type="number" class="cargo-freight" step="0.01"></td><td><input type="number" class="cargo-pickup" step="0.01"></td>
+                    <td><input type="number" class="cargo-delivery" step="0.01"></td><td><input type="number" class="cargo-insurance-value" step="0.01"></td>
+                    <td><input type="number" class="cargo-insurance-fee" step="0.01"></td><td><input type="number" class="cargo-total" step="0.01" readonly></td>
+                </tr>
+                <tr>
+                    <td><input type="text" class="cargo-name"></td><td><input type="text" class="cargo-package"></td>
+                    <td><input type="text" class="cargo-quantity"></td><td><input type="text" class="cargo-weight"></td>
+                    <td><input type="number" class="cargo-freight" step="0.01"></td><td><input type="number" class="cargo-pickup" step="0.01"></td>
+                    <td><input type="number" class="cargo-delivery" step="0.01"></td><td><input type="number" class="cargo-insurance-value" step="0.01"></td>
+                    <td><input type="number" class="cargo-insurance-fee" step="0.01"></td><td><input type="number" class="cargo-total" step="0.01" readonly></td>
+                </tr>
+                <tr>
+                    <td class="label-cell" colspan="2">总运费（大写）</td>
+                    <td colspan="4"><input type="text" id="total_freight_words" placeholder="万 仟 佰 拾 元" readonly></td>
+                    <td class="label-cell">小写¥</td>
+                    <td><input type="number" id="total_freight_digits" step="0.01" style="text-align:right" readonly></td>
+                    <td class="label-cell">付款方式</td>
+                    <td><input type="text" id="payment_method"></td>
+                </tr>
+                <tr>
+                    <td class="label-cell">备注</td>
+                    <td colspan="9"><input type="text" id="remarks"></td>
+                </tr>
+                <tr>
+                    <td class="label-cell" style="writing-mode:vertical-rl;text-orientation:upright">协议事项</td>
+                    <td colspan="9" class="terms-cell">
+                        <div class="terms-text">
+                            一、以上货物承运方不拆开检验点件装车，如运到时包装完好，承运方不负内容责任。<br>
+                            二、托运方必须提供货物运输中一切相关手续，如途中因手续不全造成的损失，由托运方负责处理。<br>
+                            三、承运方在确定运输事项后，在运输途中如有失误造成货物破损，受潮，缺件等，均有承运方负责。<br>
+                            四、托运货物时应如实声明货物实际价值，不参加保险的货物，如发生意外丢失、破损等情况，本公司赔偿金额最多不超过运费的三倍。<br>
+                            五、承运方应按约定时间到达目的地，车辆如遇特殊情况不能正常到达，则应电告托运方，否则责任由承运方负责。<br>
+                            六、本协议一式三份，由双方各执一份，并经双方签字盖章后生效，货物、运费结清协议终止。
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="5" class="signature-cell">托运方签字（盖章）</td>
+                    <td colspan="5" class="signature-cell">承运方签字（盖章）</td>
+                </tr>
+            </table>
+        </div>
+        <div id="history-panel" class="history-panel">
+            <h2 style="margin-bottom:15px">历史记录</h2>
+            <table class="history-table">
+                <thead><tr><th>ID</th><th>运单号</th><th>托运单位</th><th>收货单位</th><th>日期</th><th>创建时间</th><th>操作</th></tr></thead>
+                <tbody id="history_list"></tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const now = new Date();
+        document.getElementById('date').value = `${now.getFullYear()}年${String(now.getMonth()+1).padStart(2,'0')}月${String(now.getDate()).padStart(2,'0')}日`;
+
+        function toggleHistory() {
+            const wp = document.getElementById('waybill-panel');
+            const hp = document.getElementById('history-panel');
+            if (hp.classList.contains('active')) { hp.classList.remove('active'); wp.style.display = 'block'; }
+            else { hp.classList.add('active'); wp.style.display = 'none'; loadHistory(); }
+        }
+
+        function showMessage(text, type) {
+            const el = document.getElementById('msg');
+            el.textContent = text; el.className = 'message ' + type; el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
+
+        function numberToChinese(num) {
+            if (!num || isNaN(num)) return '';
+            const digits = ['零','壹','贰','叁','肆','伍','陆','柒','捌','玖'];
+            const units = ['','拾','佰','仟'];
+            const bigUnits = ['','万','亿'];
+            let str = Math.abs(num).toFixed(2);
+            let [intPart, decPart] = str.split('.');
+            let result = '', zeroFlag = false;
+            for (let i = 0; i < intPart.length; i++) {
+                let digit = parseInt(intPart[i]);
+                let pos = intPart.length - 1 - i;
+                if (digit === 0) { zeroFlag = true; }
+                else { if (zeroFlag) { result += '零'; zeroFlag = false; } result += digits[digit] + units[pos % 4]; }
+                if (pos % 4 === 0 && bigUnits[Math.floor(pos/4)]) result += bigUnits[Math.floor(pos/4)];
+            }
+            if (!result) result = '零';
+            let dec1 = parseInt(decPart[0]), dec2 = parseInt(decPart[1]);
+            if (dec1 === 0 && dec2 === 0) result += '元整';
+            else { result += '元'; if (dec1 > 0) result += digits[dec1] + '角'; if (dec2 > 0) result += digits[dec2] + '分'; }
+            return result;
+        }
+
+        function calculateTotals() {
+            const rows = document.querySelectorAll('.waybill-table tr');
+            let grandTotal = 0;
+            for (let i = 5; i <= 6; i++) {
+                const inputs = rows[i].querySelectorAll('input');
+                if (inputs.length >= 10) {
+                    const freight = parseFloat(inputs[4].value) || 0;
+                    const pickup = parseFloat(inputs[5].value) || 0;
+                    const delivery = parseFloat(inputs[6].value) || 0;
+                    const insuranceFee = parseFloat(inputs[8].value) || 0;
+                    const rowTotal = freight + pickup + delivery + insuranceFee;
+                    inputs[9].value = rowTotal > 0 ? rowTotal.toFixed(2) : '';
+                    grandTotal += rowTotal;
+                }
+            }
+            if (grandTotal > 0) {
+                document.getElementById('total_freight_digits').value = grandTotal.toFixed(2);
+                document.getElementById('total_freight_words').value = numberToChinese(grandTotal);
+            } else {
+                document.getElementById('total_freight_digits').value = '';
+                document.getElementById('total_freight_words').value = '';
+            }
+        }
+
+        async function loadNextWaybillNo() {
+            try {
+                const res = await fetch('/api/history');
+                const data = await res.json();
+                if (data.waybills && data.waybills.length > 0) {
+                    const lastNo = parseInt(data.waybills[0].waybill_no) || 0;
+                    document.getElementById('waybill_no').value = String(lastNo + 1).padStart(7, '0');
+                } else { document.getElementById('waybill_no').value = '0001030'; }
+            } catch(e) { document.getElementById('waybill_no').value = '0001030'; }
+        }
+
+        async function loadPrinters() {
+            const res = await fetch('/api/printers');
+            const data = await res.json();
+            const select = document.getElementById('printer');
+            select.innerHTML = '';
+            data.printers.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p; opt.textContent = p;
+                if (p.includes('HP')) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function generatePreviewHTML(data) {
+            const cargoRows = JSON.parse(data.cargo_data || '[]');
+            let cargoHTML = '';
+            for (let i = 0; i < 2; i++) {
+                const c = cargoRows[i] || {};
+                cargoHTML += `<tr><td>${c.name||''}</td><td>${c.package||''}</td><td>${c.quantity||''}</td><td>${c.weight_volume||''}</td><td style="text-align:right">${c.freight||''}</td><td style="text-align:right">${c.pickup_fee||''}</td><td style="text-align:right">${c.delivery_fee||''}</td><td style="text-align:right">${c.insurance_value||''}</td><td style="text-align:right">${c.insurance_fee||''}</td><td style="text-align:right">${c.total||''}</td></tr>`;
+            }
+            return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>打印预览</title>
+<style>@page{size:189mm 129mm;margin:5mm}body{font-family:"SimSun";margin:0;padding:0;background:#e0e0e0}
+.preview-bar{background:#f0f0f0;padding:10px;text-align:center;position:sticky;top:0;z-index:100}
+.preview-bar button{padding:8px 16px;margin:0 10px;font-size:14px;cursor:pointer;border:none;border-radius:4px;color:white}
+.btn-print{background:#4CAF50}.btn-close{background:#f44336}
+.page-container{display:flex;justify-content:center;padding:20px}
+.waybill{width:179mm;background:white;border:1.5px solid #000;box-sizing:border-box}
+.header{display:flex;justify-content:center;align-items:center;padding:3mm 5mm 2mm;position:relative}
+.title{font-size:14pt;font-weight:bold;font-family:"SimHei"}
+.number{font-size:11pt;color:#CC0000;font-weight:bold;position:absolute;right:5mm}
+.info-row{display:flex;justify-content:space-between;padding:1mm 5mm 2mm;font-size:9pt}
+table{width:100%;border-collapse:collapse;font-size:8pt}
+td,th{border:0.5px solid #000;padding:1.5mm 1mm;vertical-align:middle}
+.label{background:#f5f5f5;font-weight:bold;text-align:center;white-space:nowrap}
+.cargo-header{text-align:center;font-weight:bold;background:#f5f5f5;font-size:7pt}
+.terms-label{writing-mode:vertical-rl;text-orientation:upright;font-weight:bold;font-size:7pt;text-align:center}
+.terms-text{font-size:6pt;line-height:1.5}
+.signature{height:12mm;vertical-align:bottom;text-align:center;font-weight:bold;font-size:9pt}
+@media print{.preview-bar{display:none}body{background:white}.page-container{padding:0}.waybill{box-shadow:none}}</style></head>
+<body><div class="preview-bar"><strong>打印预览</strong> — 189mm×129mm <button class="btn-print" onclick="window.print()">🖨 打印</button><button class="btn-close" onclick="window.close()"> 关闭</button></div>
+<div class="page-container"><div class="waybill">
+<div class="header"><div class="title">常熟市中伟物流有限公司</div><div class="number">№ ${data.waybill_no||'0001030'}</div></div>
+<div class="info-row"><span><strong>始发站：</strong>${data.departure_station||''}</span><span><strong>到达站：</strong>${data.arrival_station||''}</span><span><strong>日期：</strong>${data.date||''}</span></div>
+<table><tr><td class="label">托运单位</td><td colspan="2">${data.shipper||''}</td><td class="label">单位地址</td><td colspan="2">${data.shipper_address||''}</td><td class="label">电话</td><td colspan="3">${data.shipper_phone||''}</td></tr>
+<tr><td class="label">收货单位</td><td colspan="2">${data.receiver||''}</td><td class="label">单位地址</td><td colspan="6">${data.receiver_address||''}</td></tr>
+<tr><td class="label" colspan="2">联系人/电话</td><td colspan="8">${data.contact||''}</td></tr>
+<tr><th class="cargo-header">货物名称</th><th class="cargo-header">包装</th><th class="cargo-header">数量</th><th class="cargo-header">重量/体积</th><th class="cargo-header">运费</th><th class="cargo-header">提货费</th><th class="cargo-header">送货费</th><th class="cargo-header">货物保价</th><th class="cargo-header">保险费</th><th class="cargo-header">合计</th></tr>
+${cargoHTML}
+<tr><td class="label" colspan="2">总运费（大写）</td><td colspan="4">${data.total_freight_words||''}</td><td class="label">小写¥</td><td style="text-align:right">${data.total_freight_digits||''}</td><td class="label">付款方式</td><td>${data.payment_method||''}</td></tr>
+<tr><td class="label">备注</td><td colspan="9">${data.remarks||''}</td></tr>
+<tr><td class="terms-label">协议事项</td><td colspan="9"><div class="terms-text">一、以上货物承运方不拆开检验点件装车，如运到时包装完好，承运方不负内容责任。<br>二、托运方必须提供货物运输中一切相关手续，如途中因手续不全造成的损失，由托运方负责处理。<br>三、承运方在确定运输事项后，在运输途中如有失误造成货物破损，受潮，缺件等，均有承运方负责。<br>四、托运货物时应如实声明货物实际价值，不参加保险的货物，如发生意外丢失、破损等情况，本公司赔偿金额最多不超过运费的三倍。<br>五、承运方应按约定时间到达目的地，车辆如遇特殊情况不能正常到达，则应电告托运方，否则责任由承运方负责。<br>六、本协议一式三份，由双方各执一份，并经双方签字盖章后生效，货物、运费结清协议终止。</div></td></tr>
+<tr><td colspan="5" class="signature">托运方签字（盖章）</td><td colspan="5" class="signature">承运方签字（盖章）</td></tr></table></div></div></body></html>`;
+        }
+
+        function getFormData() {
+            const rows = document.querySelectorAll('.waybill-table tr');
+            for (let i = 5; i <= 6; i++) {
+                const inputs = rows[i].querySelectorAll('input');
+                if (inputs.length >= 10) {
+                    const data = { name:inputs[0].value, package:inputs[1].value, quantity:inputs[2].value, weight_volume:inputs[3].value, freight:inputs[4].value, pickup_fee:inputs[5].value, delivery_fee:inputs[6].value, insurance_value:inputs[7].value, insurance_fee:inputs[8].value, total:inputs[9].value };
+                    if (Object.values(data).some(v => v)) cargoData.push(data);
+                }
+            }
+            return { waybill_no:document.getElementById('waybill_no').value, departure_station:document.getElementById('departure_station').value, arrival_station:document.getElementById('arrival_station').value, date:document.getElementById('date').value, shipper:document.getElementById('shipper').value, shipper_address:document.getElementById('shipper_address').value, shipper_phone:document.getElementById('shipper_phone').value, receiver:document.getElementById('receiver').value, receiver_address:document.getElementById('receiver_address').value, contact:document.getElementById('contact').value, cargo_data:JSON.stringify(cargoData), total_freight_words:document.getElementById('total_freight_words').value, total_freight_digits:document.getElementById('total_freight_digits').value||'', payment_method:document.getElementById('payment_method').value, remarks:document.getElementById('remarks').value };
+        }
+
+        async function saveAndPrint() {
+            const data = getFormData();
+            if (!data.shipper && !data.receiver) { showMessage('请至少填写托运单位或收货单位', 'error'); return; }
+            const printer = document.getElementById('printer').value;
+            const copies = document.getElementById('copies').value;
+            const res = await fetch('/api/print', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...data, printer, copies:parseInt(copies)}) });
+            const result = await res.json();
+            if (result.success) { showMessage('打印成功！ID: '+result.id, 'success'); clearForm(); }
+            else { showMessage('打印失败：'+result.error, 'error'); }
+        }
+
+        function clearForm() {
+            document.querySelectorAll('.waybill-table input').forEach(i => i.value = '');
+            loadNextWaybillNo();
+            const now = new Date();
+            document.getElementById('date').value = `${now.getFullYear()}年${String(now.getMonth()+1).padStart(2,'0')}月${String(now.getDate()).padStart(2,'0')}日`;
+        }
+
+        async function loadHistory() {
+            const res = await fetch('/api/history');
+            const data = await res.json();
+            const tbody = document.getElementById('history_list');
+            tbody.innerHTML = '';
+            data.waybills.forEach(w => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${w.id}</td><td>${w.waybill_no||''}</td><td>${w.shipper||''}</td><td>${w.receiver||''}</td><td>${w.date||''}</td><td>${w.created_at||''}</td><td><button onclick="event.stopPropagation();printHistory(${w.id})">打印</button></td>`;
+                tr.onclick = () => loadToForm(w.id);
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function loadToForm(id) {
+            const res = await fetch('/api/waybill/'+id);
+            const data = await res.json();
+            if (!data.waybill) return;
+            const w = data.waybill;
+            document.getElementById('waybill_no').value = w.waybill_no||'';
+            document.getElementById('departure_station').value = w.departure_station||'';
+            document.getElementById('arrival_station').value = w.arrival_station||'';
+            document.getElementById('date').value = w.date||'';
+            document.getElementById('shipper').value = w.shipper||'';
+            document.getElementById('shipper_address').value = w.shipper_address||'';
+            document.getElementById('shipper_phone').value = w.shipper_phone||'';
+            document.getElementById('receiver').value = w.receiver||'';
+            document.getElementById('receiver_address').value = w.receiver_address||'';
+            document.getElementById('contact').value = w.contact||'';
+            document.getElementById('total_freight_words').value = w.total_freight_words||'';
+            document.getElementById('total_freight_digits').value = w.total_freight_digits||'';
+            document.getElementById('payment_method').value = w.payment_method||'';
+            document.getElementById('remarks').value = w.remarks||'';
+            try {
+                const cargo = JSON.parse(w.cargo_data||'[]');
+                const rows = document.querySelectorAll('.waybill-table tr');
+                cargo.forEach((c,i) => { if (i<2) { const inputs=rows[5+i].querySelectorAll('input'); inputs[0].value=c.name||'';inputs[1].value=c.package||'';inputs[2].value=c.quantity||'';inputs[3].value=c.weight_volume||'';inputs[4].value=c.freight||'';inputs[5].value=c.pickup_fee||'';inputs[6].value=c.delivery_fee||'';inputs[7].value=c.insurance_value||'';inputs[8].value=c.insurance_fee||'';inputs[9].value=c.total||''; }});
+            } catch(e) {}
+            document.getElementById('history-panel').classList.remove('active');
+            document.getElementById('waybill-panel').style.display = 'block';
+        }
+
+        async function printHistory(id) {
+            const printer = document.getElementById('printer').value;
+            const copies = document.getElementById('copies').value;
+            const res = await fetch('/api/print/'+id, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({printer, copies:parseInt(copies)}) });
+            const result = await res.json();
+            if (result.success) showMessage('打印成功！','success');
+            else showMessage('打印失败：'+result.error,'error');
+        }
+
+        loadPrinters();
+        loadNextWaybillNo();
+        document.querySelectorAll('.cargo-freight,.cargo-pickup,.cargo-delivery,.cargo-insurance-fee').forEach(input => {
+            input.addEventListener('input', calculateTotals);
+            input.addEventListener('blur', calculateTotals);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+"""Print waybill using reportlab (PDF) + lp command.
+Paper: 189mm × 129mm (custom size).
+
+Key fixes:
+- Terms use Paragraph for auto-wrapping (10pt, no overflow)
+- Long text fields (company names, addresses) use Paragraph
+- Row heights restored: normal=9mm, cargo=11mm
+"""
+import subprocess
+import json
+import re
+from pathlib import Path
+
+from reportlab.lib.units import mm
+from reportlab.lib.colors import black, red, lightgrey, white, HexColor
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+
+# === 注册中文字体 ===
+_SIMSUN = "/System/Library/Fonts/Supplemental/Songti.ttc"
+_SIMHEI = "/System/Library/Fonts/STHeiti Medium.ttc"
+
+pdfmetrics.registerFont(TTFont("SimSun", _SIMSUN, subfontIndex=0))
+pdfmetrics.registerFont(TTFont("SimHei", _SIMHEI, subfontIndex=0))
+
+
+# 纸张尺寸：189mm × 129mm
+PAPER_W = 189 * mm
+PAPER_H = 129 * mm
+
+
+def generate_pdf(data: dict, output_path: str) -> str:
+    """Generate PDF waybill using reportlab."""
+    c = canvas.Canvas(output_path, pagesize=(PAPER_W, PAPER_H))
+
+    # 页边距
+    ML = 5 * mm
+    MR = 5 * mm
+    MT = 1 * mm
+    MB = 1 * mm
+
+    usable_w = PAPER_W - ML - MR
+
+    # === 标题（黑体 14pt，整体下移 10mm）===
+    c.setFont("SimHei", 14)
+    c.setFillColor(black)
+    title_y = PAPER_H - MT - 5 * mm - 10 * mm
+    c.drawCentredString(PAPER_W / 2, title_y, "常熟市中伟物流有限公司")
+
+    # === 单据编号（红色宋体 10pt，右对齐）===
+    c.setFont("SimSun", 10)
+    c.setFillColor(red)
+    waybill_no = data.get("waybill_no", "0001030")
+    c.drawRightString(PAPER_W - MR, title_y, f"No {waybill_no}")
+    c.setFillColor(black)
+
+    # === 10 列布局（归一化到可用宽度）===
+    col_w_raw = [18, 14, 14, 22, 20, 18, 18, 22, 20, 22]
+    total_raw = sum(col_w_raw)
+    col_w = [w * usable_w / total_raw for w in col_w_raw]
+
+    def col_x(n):
+        return ML + sum(col_w[:n])
+
+    # 行高（恢复版）
+    rh_normal = 9 * mm
+    rh_cargo = 11 * mm
+
+    # === Paragraph 样式 ===
+    styles = getSampleStyleSheet()
+    # 普通文本样式（9pt，左对齐）
+    text_style = ParagraphStyle(
+        'Normal9',
+        parent=styles['Normal'],
+        fontName='SimSun',
+        fontSize=9,
+        leading=11,
+        alignment=0,  # 左对齐
+    )
+    # 条款样式（10pt，左对齐）
+    terms_style = ParagraphStyle(
+        'Terms10',
+        parent=styles['Normal'],
+        fontName='SimSun',
+        fontSize=10,
+        leading=13,
+        alignment=0,
+    )
+
+    # === 辅助函数：绘制表格行（支持 Paragraph）===
+    def draw_row(y_pos, height, cells, is_header=False):
+        """cells = [(col_start, col_span, text, is_label, align, use_paragraph)]"""
+        row_top = y_pos
+        row_bot = y_pos - height
+
+        for (cs, span, text, is_label, align, use_para) in cells:
+            x = col_x(cs)
+            w = sum(col_w[cs:cs + span])
+
+            # 标签背景
+            if is_label:
+                c.setFillColor(lightgrey)
+                c.rect(x, row_bot, w, height, fill=1, stroke=0)
+                c.setFillColor(black)
+
+            # 单元格边框
+            c.setStrokeColor(black)
+            c.setLineWidth(0.3)
+            c.rect(x, row_bot, w, height, fill=0, stroke=1)
+
+            # 文字
+            if text:
+                if use_para:
+                    # 使用 Paragraph 自动换行
+                    para = Paragraph(text, text_style)
+                    para_w = w - 4 * mm
+                    para_h = height - 2 * mm
+                    para.wrapOn(c, para_w, para_h)
+                    para.drawOn(c, x + 2 * mm, row_bot + 1 * mm)
+                else:
+                    font_size = 8 if is_header else 9
+                    c.setFont("SimSun", font_size)
+                    if align == "center":
+                        tw = c.stringWidth(text, "SimSun", font_size)
+                        x_off = x + (w - tw) / 2
+                    elif align == "right":
+                        tw = c.stringWidth(text, "SimSun", font_size)
+                        x_off = x + w - tw - 1 * mm
+                    else:
+                        x_off = x + 2 * mm
+                    y_off = row_bot + 3 * mm
+                    c.drawString(x_off, y_off, text)
+
+        return row_bot
+
+    # === 始发站/到达站/日期（表格外，宋体 8pt）===
+    c.setFont("SimSun", 8)
+    info_y = title_y - 3 * mm
+    c.drawString(ML, info_y, f"始发站：{data.get('departure_station', '')}")
+    c.drawString(ML + 65 * mm, info_y, f"到达站：{data.get('arrival_station', '')}")
+    c.drawString(ML + 120 * mm, info_y, f"日期：{data.get('date', '')}")
+
+    # 表格起点
+    cy = info_y - 3 * mm
+
+    # === Row 1: 托运单位（长文本用 Paragraph）===
+    cy = draw_row(cy, rh_normal, [
+        (0, 1, "托运单位", True, "center", False),
+        (1, 2, data.get("shipper", ""), False, "left", True),  # Paragraph
+        (3, 1, "单位地址", True, "center", False),
+        (4, 3, data.get("shipper_address", ""), False, "left", True),  # Paragraph
+        (7, 1, "电话", True, "center", False),
+        (8, 2, data.get("shipper_phone", ""), False, "left", False),
+    ])
+
+    # === Row 2: 收货单位（长文本用 Paragraph）===
+    cy = draw_row(cy, rh_normal, [
+        (0, 1, "收货单位", True, "center", False),
+        (1, 2, data.get("receiver", ""), False, "left", True),  # Paragraph
+        (3, 1, "单位地址", True, "center", False),
+        (4, 6, data.get("receiver_address", ""), False, "left", True),  # Paragraph
+    ])
+
+    # === Row 3: 联系人/电话 ===
+    cy = draw_row(cy, rh_normal, [
+        (0, 2, "联系人/电话", True, "center", False),
+        (2, 8, data.get("contact", ""), False, "left", False),
+    ])
+
+    # === Row 4: 货物表头 ===
+    cargo_headers = [
+        "货物名称", "包装", "数量", "重量/体积", "运费",
+        "提货费", "送货费", "货物保价", "保险费", "合计",
+    ]
+    cy = draw_row(
+        cy, rh_normal,
+        [(i, 1, h, True, "center", False) for i, h in enumerate(cargo_headers)],
+        is_header=True,
+    )
+
+    # === Row 5-6: 货物数据 ===
+    cargo_data = json.loads(data.get("cargo_data", "[]") or "[]")
+    for row_idx in range(2):
+        cargo = cargo_data[row_idx] if row_idx < len(cargo_data) else {}
+        cy = draw_row(cy, rh_cargo, [
+            (0, 1, cargo.get("name", ""), False, "left", False),
+            (1, 1, cargo.get("package", ""), False, "center", False),
+            (2, 1, cargo.get("quantity", ""), False, "center", False),
+            (3, 1, cargo.get("weight_volume", ""), False, "left", False),
+            (4, 1, cargo.get("freight", ""), False, "right", False),
+            (5, 1, cargo.get("pickup_fee", ""), False, "right", False),
+            (6, 1, cargo.get("delivery_fee", ""), False, "right", False),
+            (7, 1, cargo.get("insurance_value", ""), False, "right", False),
+            (8, 1, cargo.get("insurance_fee", ""), False, "right", False),
+            (9, 1, cargo.get("total", ""), False, "right", False),
+        ])
+
+    # === Row 7: 总运费 ===
+    cy = draw_row(cy, rh_normal, [
+        (0, 2, "总运费（大写）", True, "center", False),
+        (2, 4, data.get("total_freight_words", ""), False, "left", True),  # Paragraph
+        (6, 1, "小写", True, "center", False),
+        (7, 1, data.get("total_freight_digits", ""), False, "right", False),
+        (8, 1, "付款方式", True, "center", False),
+        (9, 1, data.get("payment_method", ""), False, "left", False),
+    ])
+
+    # === Row 8: 备注 ===
+    cy = draw_row(cy, rh_normal, [
+        (0, 1, "备注", True, "center", False),
+        (1, 9, data.get("remarks", ""), False, "left", False),
+    ])
+
+    # ================================================================
+    # Row 9: 协议事项（Paragraph 自动换行）
+    # 只保留外边框（一个完整矩形），不画内部列分隔线
+    # 条款文字：10pt，左对齐
+    # ================================================================
+    terms_h = 24 * mm
+    terms_top = cy
+    terms_bot = cy - terms_h
+    label_w = col_w[0]
+
+    # 整行白色背景
+    c.setFillColor(white)
+    c.rect(ML, terms_bot, usable_w, terms_h, fill=1, stroke=0)
+
+    # 标签区域浅灰背景
+    c.setFillColor(HexColor("#EDEDED"))
+    c.rect(ML, terms_bot, label_w, terms_h, fill=1, stroke=0)
+    c.setFillColor(black)
+
+    # 只画一个外边框矩形（无内部竖线）
+    c.setStrokeColor(black)
+    c.setLineWidth(0.3)
+    c.rect(ML, terms_bot, usable_w, terms_h, fill=0, stroke=1)
+
+    # "协议事项" 竖排标签（9pt）
+    c.setFont("SimSun", 9)
+    label_chars = "协议事项"
+    label_x = ML + label_w * 0.35
+    char_spacing = terms_h / (len(label_chars) + 1)
+    for i, ch in enumerate(label_chars):
+        y_ch = terms_top - char_spacing * (i + 1)
+        c.drawString(label_x, y_ch, ch)
+
+    # 条款正文：10pt，Paragraph 自动换行
+    tx = ML + label_w + 3 * mm
+    ty = terms_top - 3 * mm
+    terms_text = """一、以上货物承运方不拆开检验点件装车，如运到时包装完好，承运方不负内容责任。<br/>
+二、托运方必须提供货物运输中一切相关手续，如途中因手续不全造成的损失，由托运方负责处理。<br/>
+三、承运方在确定运输事项后，在运输途中如有失误造成货物破损，受潮，缺件等，均有承运方负责。<br/>
+四、托运货物时应如实声明货物实际价值，不参加保险的货物，如发生意外丢失、破损等情况，本公司赔偿金额最多不超过运费的三倍。<br/>
+五、承运方应按约定时间到达目的地，车辆如遇特殊情况不能正常到达，则应电告托运方，否则责任由承运方负责。<br/>
+六、本协议一式三份，由双方各执一份，并经双方签字盖章后生效，货物、运费结清协议终止。"""
+
+    terms_para = Paragraph(terms_text, terms_style)
+    terms_para_w = usable_w - label_w - 6 * mm
+    terms_para_h = terms_h - 6 * mm
+    terms_para.wrapOn(c, terms_para_w, terms_para_h)
+    terms_para.drawOn(c, tx, terms_bot + 3 * mm)
+
+    cy = terms_bot
+
+    # ================================================================
+    # Row 10: 签字栏（5mm 高）
+    # ================================================================
+    sig_h = 5 * mm
+    sig_w = usable_w / 2
+    c.setStrokeColor(black)
+    c.setLineWidth(0.3)
+    # 左半：托运方
+    c.rect(ML, cy - sig_h, sig_w, sig_h, fill=0, stroke=1)
+    c.setFont("SimHei", 7)
+    c.drawString(ML + 6 * mm, cy - sig_h + 2 * mm, "托运方签字（盖章）")
+    # 右半：承运方
+    c.rect(ML + sig_w, cy - sig_h, sig_w, sig_h, fill=0, stroke=1)
+    c.drawString(ML + sig_w + 6 * mm, cy - sig_h + 2 * mm, "承运方签字（盖章）")
+
+    cy -= sig_h
+
+    # === 表格外边框（覆盖整个表格区域）===
+    table_top = info_y - 3 * mm
+    c.setStrokeColor(black)
+    c.setLineWidth(0.5)
+    c.rect(ML, cy, usable_w, table_top - cy, fill=0, stroke=1)
+
+    c.save()
+    return output_path
+
+
+def print_waybill(data: dict, printer_name: str = None, copies: int = 1):
+    """Generate PDF and send to printer."""
+    pdf_path = "/tmp/waybill.pdf"
+    generate_pdf(data, pdf_path)
+
+    cmd = ["lp"]
+    if printer_name:
+        cmd.extend(["-d", printer_name])
+    cmd.extend(["-n", str(copies)])
+    cmd.append(pdf_path)
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print(f"✅ 打印成功！请求 ID: {result.stdout.strip()}")
+            return True
+        else:
+            print(f"❌ 打印失败：{result.stderr}")
+            return False
+    except Exception as e:
+        print(f"❌ 打印错误：{e}")
+        return False
+
+
+def list_printers():
+    """List available CUPS printers."""
+    try:
+        result = subprocess.run(
+            ["lpstat", "-a"], capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            printers = []
+            for line in result.stdout.strip().split("\n"):
+                if line:
+                    match = re.match(r"^([A-Za-z0-9_-]+)", line)
+                    if match:
+                        printers.append(match.group(1))
+            return printers
+        return []
+    except Exception:
+        return []
+
+
+if __name__ == "__main__":
+    printers = list_printers()
+    print("可用打印机:")
+    for p in printers:
+        print(f"  - {p}")

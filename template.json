@@ -1,0 +1,132 @@
+{
+  "paper": {
+    "width_mm": 189,
+    "height_mm": 129,
+    "orientation": "landscape"
+  },
+  "fields": {
+    "departure_station": {
+      "label": "始发站",
+      "x_mm": 25,
+      "y_mm": 15,
+      "width_mm": 40,
+      "font_size": 10
+    },
+    "arrival_station": {
+      "label": "到达站",
+      "x_mm": 75,
+      "y_mm": 15,
+      "width_mm": 40,
+      "font_size": 10
+    },
+    "date": {
+      "label": "日期",
+      "x_mm": 130,
+      "y_mm": 15,
+      "width_mm": 50,
+      "font_size": 10
+    },
+    "shipper": {
+      "label": "托运单位",
+      "x_mm": 25,
+      "y_mm": 25,
+      "width_mm": 40,
+      "font_size": 10
+    },
+    "shipper_address": {
+      "label": "单位地址",
+      "x_mm": 75,
+      "y_mm": 25,
+      "width_mm": 55,
+      "font_size": 10
+    },
+    "shipper_phone": {
+      "label": "电话",
+      "x_mm": 140,
+      "y_mm": 25,
+      "width_mm": 40,
+      "font_size": 10
+    },
+    "receiver": {
+      "label": "收货单位",
+      "x_mm": 25,
+      "y_mm": 35,
+      "width_mm": 40,
+      "font_size": 10
+    },
+    "receiver_address": {
+      "label": "单位地址",
+      "x_mm": 75,
+      "y_mm": 35,
+      "width_mm": 105,
+      "font_size": 10
+    },
+    "contact": {
+      "label": "联系人/电话",
+      "x_mm": 25,
+      "y_mm": 45,
+      "width_mm": 155,
+      "font_size": 10
+    },
+    "cargo_rows": [
+      {
+        "y_mm": 55,
+        "fields": {
+          "name": {"x_mm": 25, "width_mm": 25},
+          "package": {"x_mm": 50, "width_mm": 12},
+          "quantity": {"x_mm": 62, "width_mm": 12},
+          "weight_volume": {"x_mm": 74, "width_mm": 18},
+          "freight": {"x_mm": 92, "width_mm": 15},
+          "pickup_fee": {"x_mm": 107, "width_mm": 12},
+          "delivery_fee": {"x_mm": 119, "width_mm": 12},
+          "insurance_value": {"x_mm": 131, "width_mm": 15},
+          "insurance_fee": {"x_mm": 146, "width_mm": 12},
+          "total": {"x_mm": 158, "width_mm": 22}
+        }
+      },
+      {
+        "y_mm": 65,
+        "fields": {
+          "name": {"x_mm": 25, "width_mm": 25},
+          "package": {"x_mm": 50, "width_mm": 12},
+          "quantity": {"x_mm": 62, "width_mm": 12},
+          "weight_volume": {"x_mm": 74, "width_mm": 18},
+          "freight": {"x_mm": 92, "width_mm": 15},
+          "pickup_fee": {"x_mm": 107, "width_mm": 12},
+          "delivery_fee": {"x_mm": 119, "width_mm": 12},
+          "insurance_value": {"x_mm": 131, "width_mm": 15},
+          "insurance_fee": {"x_mm": 146, "width_mm": 12},
+          "total": {"x_mm": 158, "width_mm": 22}
+        }
+      }
+    ],
+    "total_freight_words": {
+      "label": "总运费（大写）",
+      "x_mm": 25,
+      "y_mm": 85,
+      "width_mm": 100,
+      "font_size": 10
+    },
+    "total_freight_digits": {
+      "label": "小写",
+      "x_mm": 125,
+      "y_mm": 85,
+      "width_mm": 20,
+      "font_size": 10
+    },
+    "payment_method": {
+      "label": "付款方式",
+      "x_mm": 145,
+      "y_mm": 85,
+      "width_mm": 35,
+      "font_size": 10
+    },
+    "remarks": {
+      "label": "备注",
+      "x_mm": 25,
+      "y_mm": 95,
+      "width_mm": 155,
+      "font_size": 10
+    }
+  }
+}
