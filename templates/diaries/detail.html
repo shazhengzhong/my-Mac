@@ -15,9 +15,43 @@
     </div>
   </div>
 
-  <section class="card zh-only">
-    <h2>中文日记</h2>
-    <div class="diary-text">{{ diary.chinese_text|linebreaksbr }}</div>
+  <section class="card">
+    <div class="heading-row">
+      <div>
+        <h2>{% if has_aligned_chinese %}双语对照{% else %}中文日记{% endif %}</h2>
+        {% if has_aligned_chinese %}
+          <p class="muted small">中文在上，英文在下；可用右上角按钮隐藏中文。</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if current and current.is_stale %}
+      <div class="notice warning">
+        中文日记在生成这版英文后又修改过。请重新翻译，或手动编辑英文后再练习。
+      </div>
+    {% endif %}
+
+    {% if has_aligned_chinese %}
+      <div class="bilingual-list">
+        {% for group in bilingual_groups %}
+          <div class="bilingual-group">
+            <p class="bilingual-zh zh-only">{{ group.chinese_text }}</p>
+            {% for sentence in group.sentences %}
+              <p class="bilingual-en" lang="en">{{ sentence.text }}</p>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="notice">
+        {% if current %}
+          当前版本还没有中英文句子对照。点“重新翻译”可生成对照；旧版本会保留。
+        {% else %}
+          这篇日记还没有英文翻译。生成英文后会在这里显示中英文对照。
+        {% endif %}
+      </div>
+      <div class="diary-text zh-only">{{ diary.chinese_text|linebreaksbr }}</div>
+    {% endif %}
   </section>
 
   <section class="card">
@@ -34,24 +68,12 @@
     </div>
 
     {% if current %}
-      {% if current.is_stale %}
-        <div class="notice warning">
-          中文日记在生成这版英文后又修改过。请重新翻译，或手动编辑英文后再练习。
-        </div>
-      {% endif %}
-
       {% if translation.is_mock %}
         <div class="notice">
           当前为<strong>模拟翻译模式</strong>：英文是固定的测试内容，不会调用 DeepSeek，也不会产生费用。
         </div>
       {% elif not translation.ready %}
         <div class="notice warning">{{ translation.message }}</div>
-      {% endif %}
-
-      {% if not has_aligned_chinese %}
-        <div class="notice">
-          当前版本没有中英文句子对照。点“重新翻译”可生成对照；旧版本会保留。
-        </div>
       {% endif %}
 
       <div class="actions">

@@ -250,6 +250,8 @@ def diary_detail(request, diary_id):
             assessment_map.setdefault(attempt.word_token_id, attempt)
     previous_chinese_ordinal = None
     has_aligned_chinese = False
+    bilingual_groups = []
+    current_group = None
     for sentence in sentences:
         sentence.tts_normal = tts_map.get((sentence.id, TtsRender.Speed.NORMAL))
         sentence.tts_slow = tts_map.get((sentence.id, TtsRender.Speed.SLOW))
@@ -261,6 +263,18 @@ def diary_detail(request, diary_id):
             bool(sentence.chinese_text)
             and sentence.chinese_ordinal != previous_chinese_ordinal
         )
+        if sentence.chinese_text and sentence.chinese_ordinal is not None:
+            if (
+                current_group is None
+                or current_group["ordinal"] != sentence.chinese_ordinal
+            ):
+                current_group = {
+                    "ordinal": sentence.chinese_ordinal,
+                    "chinese_text": sentence.chinese_text,
+                    "sentences": [],
+                }
+                bilingual_groups.append(current_group)
+            current_group["sentences"].append(sentence)
         if sentence.chinese_ordinal is not None:
             previous_chinese_ordinal = sentence.chinese_ordinal
         else:
@@ -275,6 +289,7 @@ def diary_detail(request, diary_id):
             "sentences": sentences,
             "previous_count": previous_count,
             "has_aligned_chinese": has_aligned_chinese,
+            "bilingual_groups": bilingual_groups,
             "translation": _translation_status(),
             "tts": _tts_status(),
             "assessment": _assessment_status(),

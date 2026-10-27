@@ -463,6 +463,8 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
         )
 
         detail = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(detail, "双语对照")
+        self.assertContains(detail, "Today I wrote a short diary in Chinese.")
         self.assertContains(detail, "data-chinese-toggle")
         self.assertContains(detail, "sentence-zh")
         self.assertContains(detail, "practice-zh")

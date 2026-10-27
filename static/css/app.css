@@ -683,6 +683,39 @@ button.button {
   overflow-wrap: anywhere;
 }
 
+.bilingual-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bilingual-group {
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfaf6;
+}
+
+.bilingual-zh {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.bilingual-en {
+  margin: 0;
+  color: #22332e;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.bilingual-en + .bilingual-en {
+  margin-top: 0.35rem;
+}
+
 .sentence-list {
   list-style: none;
   counter-reset: sentence;
