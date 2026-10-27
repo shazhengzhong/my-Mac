@@ -83,10 +83,26 @@ def _tts_status() -> dict:
             "ready": True,
             "message": "当前示范音频是模拟提示音，不是真人语音，也不会产生费用。",
         }
+    if provider == "volcengine":
+        credentials_ready = bool(
+            settings.VOLCENGINE_API_KEY
+            or (settings.VOLCENGINE_APP_ID and settings.VOLCENGINE_ACCESS_TOKEN)
+        )
+        if not credentials_ready or not settings.VOLCENGINE_TTS_VOICE:
+            return {
+                "is_mock": False,
+                "ready": False,
+                "message": "真实语音尚未配置完整的凭据或音色。",
+            }
+        return {
+            "is_mock": False,
+            "ready": True,
+            "message": "真实语音已启用；每句会消耗 TTS 字符额度。",
+        }
     return {
         "is_mock": False,
         "ready": False,
-        "message": "真实情感语音服务尚未接入；当前只能使用模拟音频。",
+        "message": "语音服务配置异常。",
     }
 
 

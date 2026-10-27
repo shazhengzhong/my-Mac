@@ -2,7 +2,7 @@
 
 给家人私用的英语口语练习网页：写中文日记，生成自然美式英文、单词级美式音标，自己录音后回放对比。
 
-> 当前阶段：**M3 录音、私有音频和模拟示范朗读完成**。
+> 当前阶段：**M4 DeepSeek 真实翻译已启用，火山 TTS 适配器已就绪待凭据**。
 > 真实情感人声和正式部署尚未接入；自动发音评分明确不做。
 
 ## 已实现
@@ -117,6 +117,30 @@ DEEPSEEK_MODEL=deepseek-chat
 - 每日次数上限由 `TRANSLATION_DAILY_REQUEST_LIMIT` 控制。
 - 真正开启前应先取得明确同意，并先用一句短文本验证。
 
+### 真实火山 TTS（适配器已完成，待凭据）
+
+适配器已按火山引擎豆包语音 V3 HTTP SSE 接口实现，并通过离线测试；当前 `.env` 仍是 `TTS_PROVIDER=mock`，不会产生费用。
+
+准备好账号后，由你本人编辑 `.env`：
+
+```text
+TTS_PROVIDER=volcengine
+# 新版控制台（推荐）
+VOLCENGINE_API_KEY=你的密钥
+# 或者旧版控制台
+# VOLCENGINE_APP_ID=你的 App ID
+# VOLCENGINE_ACCESS_TOKEN=你的 Access Token
+VOLCENGINE_TTS_VOICE=en_female_dacey_uranus_bigtts
+VOLCENGINE_RESOURCE_ID=seed-tts-2.0
+```
+
+注意：
+
+- 2.0 音色必须以 `_uranus_bigtts` 结尾，并配 `seed-tts-2.0`；1.0 音色配 `seed-tts-1.0`。不匹配会报 `55000000`。
+- 首次只生成一句试听，确认音质和费用后再继续。
+- 每日字符额度由 `TTS_DAILY_CHAR_LIMIT` 控制。
+- 凭据只写在 `.env`，不要发到聊天或截图。
+
 ## 怎样试录音和模拟示范朗读
 
 1. 启动本地网站并登录
@@ -137,14 +161,14 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-当前结果：**74 项测试全部通过**（2026-10-26），覆盖账号、邀请、恢复码、日记归属隔离、模拟翻译、DeepSeek 请求结构、句子拆分、音标、版本更新、每日翻译上限、录音 WAV 校验、音频越权拦截、HTTP Range 播放、模拟朗读缓存和 TTS 字符额度。浏览器脚本另通过 `node --check` 语法检查。
+当前结果：**84 项测试全部通过**（2026-10-27），覆盖账号、邀请、恢复码、日记归属隔离、模拟翻译、DeepSeek 请求结构、句子拆分、音标、版本更新、每日翻译上限、录音 WAV 校验、音频越权拦截、HTTP Range 播放、模拟朗读缓存、TTS 字符额度，以及火山 TTS 的 SSE 解析、PCM→WAV 转换、两种鉴权、语速和错误映射。浏览器脚本另通过 `node --check` 语法检查。测试运行器会强制使用 mock，不会误触发付费调用。
 
 ## 配置与密钥
 
 - 本地配置保存在 `.env`，权限应为仅当前用户可读（`600`）。
 - `.env` 不会进入版本控制，也绝不能发到聊天或公开仓库。
-- DeepSeek 和未来的火山 TTS 在正式接入前都保持 mock。
-- 真实 API Key 只能在后续阶段由用户本人写入 `.env`。
+- DeepSeek 已切换为真实翻译；火山 TTS 在填入凭据前保持 mock。
+- 真实 API Key 由用户本人写入 `.env`，不要发到聊天或截图。
 
 ## 重要限制
 

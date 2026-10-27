@@ -15,9 +15,13 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             TRANSLATION_PROVIDER="mock",
             TTS_PROVIDER="mock",
             DEEPSEEK_API_KEY="",
+            VOLCENGINE_API_KEY="",
             VOLCENGINE_APP_ID="",
             VOLCENGINE_ACCESS_TOKEN="",
             VOLCENGINE_TTS_VOICE="",
+            VOLCENGINE_RESOURCE_ID="seed-tts-2.0",
+            VOLCENGINE_TTS_SAMPLE_RATE=24_000,
+            VOLCENGINE_TTS_SLOW_SPEECH_RATE=-20,
         )
         self._offline_override.enable()
         super().setup_test_environment(**kwargs)

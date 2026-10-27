@@ -1,5 +1,6 @@
 """Diary ownership, translation, IPA, versioning, and quota tests."""
 
+import base64
 import io
 import json
 from pathlib import Path
@@ -26,6 +27,12 @@ from services.translation import (
     MockTranslator,
     TranslationError,
     get_translator,
+)
+from services.tts import (
+    MockTTSProvider,
+    TTSError,
+    VolcengineTTSProvider,
+    get_tts_provider,
 )
 
 from .models import (
@@ -636,13 +643,13 @@ class TTSFlowTests(AudioTestBase):
         self.assertFalse(TtsRender.objects.exists())
 
     @override_settings(TTS_PROVIDER="volcengine")
-    def test_real_tts_is_not_accidentally_enabled(self):
+    def test_real_tts_requires_voice_and_credentials(self):
         _, sentence = self.make_sentence()
         response = self.client.post(
             reverse("sentence_tts", args=[sentence.id, "normal"]),
             follow=True,
         )
-        self.assertContains(response, "尚未接入")
+        self.assertContains(response, "尚未配置音色")
         self.assertFalse(TtsRender.objects.exists())
 
     def test_cross_user_and_anonymous_cannot_access_tts_audio(self):
@@ -683,3 +690,205 @@ class TTSFlowTests(AudioTestBase):
         self.client.post(reverse("diary_delete", args=[diary.id]))
         self.assertFalse(path.exists())
         self.assertFalse(TtsRender.objects.exists())
+
+
+class VolcengineTTSServiceTests(TestCase):
+    PCM = b"\x00\x01" * 24_000  # one second at 24 kHz, 16-bit mono
+
+    def _sse_body(self, pcm: bytes, *, end: bool = True) -> bytes:
+        middle = len(pcm) // 2
+        events = [
+            {"code": 0, "data": base64.b64encode(pcm[:middle]).decode("ascii")},
+            {"code": 0, "data": base64.b64encode(pcm[middle:]).decode("ascii")},
+        ]
+        if end:
+            events.append({"code": 20_000_000, "usage": {"text_words": 12}})
+        return (
+            "\n\n".join(f"data: {json.dumps(event)}" for event in events) + "\n\n"
+        ).encode("utf-8")
+
+    def _provider(self, handler, **overrides):
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        options = {
+            "api_key": "test-api-key",
+            "resource_id": "seed-tts-2.0",
+            "voice": "en_female_dacey_uranus_bigtts",
+            "client": client,
+        }
+        options.update(overrides)
+        return VolcengineTTSProvider(**options)
+
+    def test_streams_pcm_and_wraps_wav(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["headers"] = dict(request.headers)
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=self._sse_body(self.PCM),
+            )
+
+        provider = self._provider(handler)
+        result = provider.synthesize(
+            "Hello there.", speed="normal", style="natural"
+        )
+
+        self.assertEqual(
+            captured["url"],
+            "https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse",
+        )
+        self.assertEqual(captured["headers"]["x-api-key"], "test-api-key")
+        self.assertEqual(captured["headers"]["x-api-resource-id"], "seed-tts-2.0")
+        self.assertIn("x-api-request-id", captured["headers"])
+        self.assertEqual(
+            captured["headers"]["x-control-require-usage-tokens-return"],
+            "text_words",
+        )
+        self.assertEqual(
+            captured["payload"]["req_params"]["speaker"],
+            "en_female_dacey_uranus_bigtts",
+        )
+        self.assertEqual(captured["payload"]["req_params"]["text"], "Hello there.")
+        self.assertEqual(
+            captured["payload"]["req_params"]["audio_params"]["format"], "pcm"
+        )
+        self.assertEqual(
+            captured["payload"]["req_params"]["audio_params"]["sample_rate"], 24_000
+        )
+        self.assertEqual(
+            captured["payload"]["req_params"]["audio_params"]["speech_rate"], 0
+        )
+        self.assertNotIn(
+            "emotion", captured["payload"]["req_params"]["audio_params"]
+        )
+
+        self.assertEqual(result.content_type, "audio/wav")
+        self.assertEqual(result.extension, "wav")
+        self.assertEqual(result.duration_ms, 1_000)
+        self.assertEqual(result.provider, "volcengine")
+        self.assertEqual(result.model, "seed-tts-2.0")
+        self.assertEqual(result.voice, "en_female_dacey_uranus_bigtts")
+        self.assertEqual(result.style, "natural")
+
+        with wave.open(io.BytesIO(result.data), "rb") as wav:
+            self.assertEqual(wav.getnchannels(), 1)
+            self.assertEqual(wav.getsampwidth(), 2)
+            self.assertEqual(wav.getframerate(), 24_000)
+            self.assertEqual(wav.readframes(wav.getnframes()), self.PCM)
+
+    def test_slow_speed_uses_lower_speech_rate(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=self._sse_body(self.PCM),
+            )
+
+        provider = self._provider(handler)
+        provider.synthesize("Hello there.", speed="slow", style="neutral")
+
+        audio = captured["payload"]["req_params"]["audio_params"]
+        self.assertEqual(audio["speech_rate"], -20)
+        self.assertNotIn("emotion", audio)
+
+    def test_legacy_app_id_and_token_auth(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["headers"] = dict(request.headers)
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=self._sse_body(self.PCM),
+            )
+
+        provider = self._provider(
+            handler, api_key="", app_id="test-app", access_token="test-token"
+        )
+        provider.synthesize("Hello there.", speed="normal", style="natural")
+
+        self.assertEqual(captured["headers"]["x-api-app-id"], "test-app")
+        self.assertEqual(captured["headers"]["x-api-access-key"], "test-token")
+        self.assertNotIn("x-api-key", captured["headers"])
+
+    def test_voice_and_resource_mismatch_is_rejected_before_network(self):
+        with self.assertRaises(TTSError):
+            VolcengineTTSProvider(
+                api_key="test-api-key",
+                resource_id="seed-tts-2.0",
+                voice="BV001_streaming",
+            )
+        with self.assertRaises(TTSError):
+            VolcengineTTSProvider(
+                api_key="test-api-key",
+                resource_id="seed-tts-1.0",
+                voice="en_female_dacey_uranus_bigtts",
+            )
+
+    def test_sse_error_frame_is_friendly(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = (
+                'data: {"code": 55000000, '
+                '"message": "resource id is mismatched with speaker related resource"}\n\n'
+            ).encode("utf-8")
+            return httpx.Response(
+                200, headers={"content-type": "text/event-stream"}, content=body
+            )
+
+        provider = self._provider(handler)
+        with self.assertRaises(TTSError) as raised:
+            provider.synthesize("Hello there.", speed="normal", style="natural")
+        self.assertIn("音色与资源版本", str(raised.exception))
+
+    def test_http_auth_error_is_friendly(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"message": "unauthorized"})
+
+        provider = self._provider(handler)
+        with self.assertRaises(TTSError) as raised:
+            provider.synthesize("Hello there.", speed="normal", style="natural")
+        self.assertIn("鉴权失败", str(raised.exception))
+
+    def test_json_error_body_is_friendly(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json={"code": 40000003, "message": "quota exceeded"},
+            )
+
+        provider = self._provider(handler)
+        with self.assertRaises(TTSError) as raised:
+            provider.synthesize("Hello there.", speed="normal", style="natural")
+        self.assertIn("额度", str(raised.exception))
+
+    def test_default_provider_is_mock(self):
+        self.assertIsInstance(get_tts_provider(), MockTTSProvider)
+
+    @override_settings(
+        TTS_PROVIDER="volcengine",
+        VOLCENGINE_API_KEY="test-api-key",
+        VOLCENGINE_TTS_VOICE="en_female_dacey_uranus_bigtts",
+        VOLCENGINE_RESOURCE_ID="seed-tts-2.0",
+    )
+    def test_get_provider_builds_volcengine_adapter(self):
+        provider = get_tts_provider()
+        self.assertIsInstance(provider, VolcengineTTSProvider)
+        self.assertEqual(provider.model, "seed-tts-2.0")
+
+    @override_settings(
+        TTS_PROVIDER="volcengine",
+        VOLCENGINE_API_KEY="",
+        VOLCENGINE_APP_ID="",
+        VOLCENGINE_ACCESS_TOKEN="",
+        VOLCENGINE_TTS_VOICE="",
+    )
+    def test_get_provider_refuses_missing_configuration(self):
+        with self.assertRaises(TTSError):
+            get_tts_provider()
