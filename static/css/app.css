@@ -775,6 +775,41 @@ button.button {
   display: none !important;
 }
 
+.hide-en .en-only {
+  display: none !important;
+}
+
+.view-toggle {
+  display: inline-flex;
+  padding: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+}
+
+.view-toggle-button {
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.view-toggle-button[aria-pressed="true"] {
+  background: var(--accent-dark);
+  color: #fff;
+  font-weight: 650;
+}
+
+.view-toggle-button:focus-visible {
+  outline: 2px solid var(--accent-dark);
+  outline-offset: 1px;
+}
+
 .english-sentence {
   margin-bottom: 0.85rem;
   color: #22332e;

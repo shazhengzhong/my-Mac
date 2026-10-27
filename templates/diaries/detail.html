@@ -8,7 +8,11 @@
       <h1>{{ diary.display_title }}</h1>
     </div>
     <div class="actions">
-      <button class="button secondary" type="button" data-chinese-toggle aria-pressed="false">隐藏中文</button>
+      <div class="view-toggle" role="group" aria-label="阅读显示模式">
+        <button class="view-toggle-button" type="button" data-view-mode="both" aria-pressed="true">双语</button>
+        <button class="view-toggle-button" type="button" data-view-mode="zh" aria-pressed="false">只中文</button>
+        <button class="view-toggle-button" type="button" data-view-mode="en" aria-pressed="false">只英文</button>
+      </div>
       <a class="button secondary" href="{% url 'diary_edit' diary.id %}">编辑中文</a>
       <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">编辑英文</a>
       <a class="link danger-link" href="{% url 'diary_delete' diary.id %}">删除</a>
@@ -18,9 +22,9 @@
   <section class="card">
     <div class="heading-row">
       <div>
-        <h2>{% if has_aligned_chinese %}双语对照{% else %}中文日记{% endif %}</h2>
+        <h2>{% if has_aligned_chinese %}日记对照{% else %}中文日记{% endif %}</h2>
         {% if has_aligned_chinese %}
-          <p class="muted small">中文在上，英文在下；可用右上角按钮隐藏中文。</p>
+          <p class="muted small">可用右上角切换：双语 / 只中文 / 只英文。</p>
         {% endif %}
       </div>
     </div>
@@ -37,7 +41,7 @@
           <div class="bilingual-group">
             <p class="bilingual-zh zh-only">{{ group.chinese_text }}</p>
             {% for sentence in group.sentences %}
-              <p class="bilingual-en" lang="en">{{ sentence.text }}</p>
+              <p class="bilingual-en en-only" lang="en">{{ sentence.text }}</p>
             {% endfor %}
           </div>
         {% endfor %}
@@ -54,7 +58,7 @@
     {% endif %}
   </section>
 
-  <section class="card">
+  <section class="card en-only">
     <div class="heading-row">
       <div>
         <h2>英文与音标</h2>
@@ -239,5 +243,5 @@
 {% endblock %}
 {% block scripts %}
   <script src="{% static 'js/word-assessor.js' %}" defer></script>
-  <script src="{% static 'js/chinese-toggle.js' %}" defer></script>
+  <script src="{% static 'js/view-mode.js' %}" defer></script>
 {% endblock %}
