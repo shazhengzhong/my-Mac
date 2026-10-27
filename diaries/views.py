@@ -328,6 +328,7 @@ def generate_sentence_tts(request, sentence_id, speed):
         voice=provider.voice,
         style=style,
         speed=speed,
+        rate=provider.speech_rate(speed),
         text=sentence.text,
     )
     existing = (

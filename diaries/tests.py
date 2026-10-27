@@ -779,6 +779,23 @@ class VolcengineTTSServiceTests(TestCase):
             self.assertEqual(wav.getframerate(), 24_000)
             self.assertEqual(wav.readframes(wav.getnframes()), self.PCM)
 
+    def test_normal_speed_uses_configured_rate(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=self._sse_body(self.PCM),
+            )
+
+        provider = self._provider(handler, normal_speech_rate=-20)
+        provider.synthesize("Hello there.", speed="normal", style="natural")
+
+        audio = captured["payload"]["req_params"]["audio_params"]
+        self.assertEqual(audio["speech_rate"], -20)
+
     def test_slow_speed_uses_lower_speech_rate(self):
         captured = {}
 

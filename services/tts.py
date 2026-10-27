@@ -44,6 +44,8 @@ class TTSProvider(Protocol):
     model: str
     voice: str
 
+    def speech_rate(self, speed: str) -> int: ...
+
     def synthesize(self, text: str, *, speed: str, style: str) -> TTSResult: ...
 
 
@@ -53,6 +55,9 @@ class MockTTSProvider:
     provider = "mock"
     model = "mock"
     voice = "mock"
+
+    def speech_rate(self, speed: str) -> int:
+        return 0
 
     def synthesize(self, text: str, *, speed: str, style: str) -> TTSResult:
         duration = min(4.0, max(0.8, len(text or "") * 0.025))
@@ -127,6 +132,7 @@ class VolcengineTTSProvider:
         resource_id: str,
         voice: str,
         sample_rate: int = 24_000,
+        normal_speech_rate: int = 0,
         slow_speech_rate: int = -20,
         client: httpx.Client | None = None,
     ):
@@ -148,9 +154,13 @@ class VolcengineTTSProvider:
         self.model = resource_id
         self.voice = voice
         self.sample_rate = sample_rate
+        self.normal_speech_rate = normal_speech_rate
         self.slow_speech_rate = slow_speech_rate
         self.endpoint = VOLCENGINE_ENDPOINT
         self._client = client
+
+    def speech_rate(self, speed: str) -> int:
+        return self.slow_speech_rate if speed == "slow" else self.normal_speech_rate
 
     def _auth_headers(self) -> dict[str, str]:
         if self.api_key:
@@ -164,7 +174,7 @@ class VolcengineTTSProvider:
         audio_params = {
             "format": "pcm",
             "sample_rate": self.sample_rate,
-            "speech_rate": self.slow_speech_rate if speed == "slow" else 0,
+            "speech_rate": self.speech_rate(speed),
             "loudness_rate": 0,
         }
         emotion = {
@@ -327,9 +337,10 @@ def tts_cache_key(
     voice: str,
     style: str,
     speed: str,
+    rate: int,
     text: str,
 ) -> str:
-    material = "\x1f".join([provider, model, voice, style, speed, text])
+    material = "\x1f".join([provider, model, voice, style, speed, str(rate), text])
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -351,6 +362,7 @@ def get_tts_provider() -> TTSProvider:
             resource_id=settings.VOLCENGINE_RESOURCE_ID,
             voice=settings.VOLCENGINE_TTS_VOICE,
             sample_rate=settings.VOLCENGINE_TTS_SAMPLE_RATE,
+            normal_speech_rate=settings.VOLCENGINE_TTS_NORMAL_SPEECH_RATE,
             slow_speech_rate=settings.VOLCENGINE_TTS_SLOW_SPEECH_RATE,
         )
     raise TTSError("语音服务配置错误，请联系管理员。")

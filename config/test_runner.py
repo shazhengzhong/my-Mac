@@ -21,7 +21,8 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             VOLCENGINE_TTS_VOICE="",
             VOLCENGINE_RESOURCE_ID="seed-tts-2.0",
             VOLCENGINE_TTS_SAMPLE_RATE=24_000,
-            VOLCENGINE_TTS_SLOW_SPEECH_RATE=-20,
+            VOLCENGINE_TTS_NORMAL_SPEECH_RATE=-20,
+            VOLCENGINE_TTS_SLOW_SPEECH_RATE=-35,
         )
         self._offline_override.enable()
         super().setup_test_environment(**kwargs)
