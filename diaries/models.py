@@ -163,6 +163,7 @@ class AudioAsset(models.Model):
     class Purpose(models.TextChoices):
         RECORDING = "recording", "用户录音"
         TTS = "tts", "示范朗读"
+        WORD_TTS = "word_tts", "单词发音"
         ASSESSMENT = "assessment", "单词测评"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -257,6 +258,45 @@ class TtsRender(models.Model):
 
     def __str__(self) -> str:
         return f"{self.speed} TTS {self.id}"
+
+
+class WordTtsRender(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="word_tts_renders",
+    )
+    sentence = models.ForeignKey(
+        Sentence,
+        on_delete=models.CASCADE,
+        related_name="word_tts_renders",
+    )
+    audio = models.OneToOneField(
+        AudioAsset,
+        on_delete=models.CASCADE,
+        related_name="word_tts_render",
+    )
+    target_word = models.CharField(max_length=120)
+    provider = models.CharField(max_length=40)
+    model = models.CharField(max_length=100)
+    voice = models.CharField(max_length=100)
+    style = models.CharField(max_length=40)
+    cache_key = models.CharField(max_length=64)
+    char_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "cache_key"],
+                name="diaries_unique_user_word_tts_cache",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"单词发音 {self.target_word} {self.id}"
 
 
 class PronunciationAttempt(models.Model):

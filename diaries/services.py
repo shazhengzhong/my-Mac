@@ -21,6 +21,7 @@ from .models import (
     TtsRender,
     UsageCounter,
     WordToken,
+    WordTtsRender,
     text_hash,
 )
 
@@ -274,6 +275,50 @@ def _create_version_with_sentences(
             )
         DiaryEntry.objects.filter(pk=locked_diary.pk).update(updated_at=timezone.now())
     return version
+
+
+def create_word_tts_render(
+    *,
+    owner,
+    sentence,
+    word: str,
+    result,
+    cache_key: str,
+) -> WordTtsRender:
+    """Store a per-user word pronunciation and roll back the file on DB failure."""
+    relative_path, digest, byte_size = write_private_bytes(
+        owner_id=owner.pk,
+        purpose="word_tts",
+        data=result.data,
+        extension=result.extension,
+    )
+    try:
+        with transaction.atomic():
+            asset = AudioAsset.objects.create(
+                owner=owner,
+                sentence=sentence,
+                purpose=AudioAsset.Purpose.WORD_TTS,
+                relative_path=relative_path,
+                content_type=result.content_type,
+                byte_size=byte_size,
+                duration_ms=result.duration_ms,
+                sha256=digest,
+            )
+            return WordTtsRender.objects.create(
+                owner=owner,
+                sentence=sentence,
+                audio=asset,
+                target_word=word,
+                provider=result.provider,
+                model=result.model,
+                voice=result.voice,
+                style=result.style,
+                cache_key=cache_key,
+                char_count=len(word),
+            )
+    except Exception:
+        remove_private_bytes(relative_path)
+        raise
 
 
 def create_english_version(

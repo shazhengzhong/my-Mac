@@ -134,6 +134,7 @@ class VolcengineTTSProvider:
         sample_rate: int = 24_000,
         normal_speech_rate: int = 0,
         slow_speech_rate: int = -20,
+        word_speech_rate: int = 0,
         client: httpx.Client | None = None,
     ):
         if sample_rate not in VOLCENGINE_SAMPLE_RATES:
@@ -156,11 +157,16 @@ class VolcengineTTSProvider:
         self.sample_rate = sample_rate
         self.normal_speech_rate = normal_speech_rate
         self.slow_speech_rate = slow_speech_rate
+        self.word_speech_rate = word_speech_rate
         self.endpoint = VOLCENGINE_ENDPOINT
         self._client = client
 
     def speech_rate(self, speed: str) -> int:
-        return self.slow_speech_rate if speed == "slow" else self.normal_speech_rate
+        if speed == "slow":
+            return self.slow_speech_rate
+        if speed == "word":
+            return self.word_speech_rate
+        return self.normal_speech_rate
 
     def _auth_headers(self) -> dict[str, str]:
         if self.api_key:
@@ -364,5 +370,6 @@ def get_tts_provider() -> TTSProvider:
             sample_rate=settings.VOLCENGINE_TTS_SAMPLE_RATE,
             normal_speech_rate=settings.VOLCENGINE_TTS_NORMAL_SPEECH_RATE,
             slow_speech_rate=settings.VOLCENGINE_TTS_SLOW_SPEECH_RATE,
+            word_speech_rate=settings.VOLCENGINE_TTS_WORD_SPEECH_RATE,
         )
     raise TTSError("语音服务配置错误，请联系管理员。")

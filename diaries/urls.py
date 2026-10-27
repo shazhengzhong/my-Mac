@@ -32,6 +32,11 @@ urlpatterns = [
         name="upload_recording",
     ),
     path(
+        "words/<uuid:token_id>/tts/",
+        views.word_tts,
+        name="word_tts",
+    ),
+    path(
         "words/<uuid:token_id>/assess/",
         views.assess_word,
         name="assess_word",

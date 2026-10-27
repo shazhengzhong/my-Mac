@@ -124,11 +124,26 @@
             <div class="word-grid" aria-label="第 {{ forloop.counter }} 句的单词和美式音标">
               {% for token in sentence.tokens.all %}
                 <span class="word-chip">
-                  <span class="word-surface" lang="en">{{ token.surface }}</span>
+                  {% if tts.ready %}
+                    <button
+                      class="word-surface word-play"
+                      type="button"
+                      lang="en"
+                      data-word-play
+                      data-word-play-url="{% url 'word_tts' token.id %}"
+                      aria-label="播放 {{ token.surface }} 的发音"
+                      title="点击播放 {{ token.surface }} 的发音"
+                    >{{ token.surface }}</button>
+                  {% else %}
+                    <span class="word-surface" lang="en">{{ token.surface }}</span>
+                  {% endif %}
                   {% if token.ipa %}
                     <span class="ipa">/{{ token.ipa }}/</span>
                   {% else %}
                     <span class="ipa unknown">未收录</span>
+                  {% endif %}
+                  {% if tts.ready %}
+                    <span class="word-play-status" role="status" aria-live="polite"></span>
                   {% endif %}
                   {% if assessment.ready %}
                     <button
@@ -243,5 +258,6 @@
 {% endblock %}
 {% block scripts %}
   <script src="{% static 'js/word-assessor.js' %}" defer></script>
+  <script src="{% static 'js/word-player.js' %}" defer></script>
   <script src="{% static 'js/view-mode.js' %}" defer></script>
 {% endblock %}

@@ -33,6 +33,7 @@ from .models import (
     Sentence,
     TtsRender,
     WordToken,
+    WordTtsRender,
 )
 from .services import (
     AssessmentQuotaExceeded,
@@ -46,6 +47,7 @@ from .services import (
     create_pronunciation_attempt,
     create_recording,
     create_tts_render,
+    create_word_tts_render,
 )
 
 
@@ -456,6 +458,74 @@ def generate_sentence_tts(request, sentence_id, speed):
     else:
         messages.success(request, "示范音频已生成并缓存。")
     return _sentence_redirect(sentence.version.diary_id, sentence.id)
+
+
+@login_required
+@require_POST
+@never_cache
+def word_tts(request, token_id):
+    token = _owned_token(request, token_id)
+    try:
+        provider = get_tts_provider()
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
+
+    style = "natural"
+    speed = "word"
+    cache_key = tts_cache_key(
+        provider=provider.provider,
+        model=provider.model,
+        voice=provider.voice,
+        style=style,
+        speed=speed,
+        rate=provider.speech_rate(speed),
+        text=token.surface,
+    )
+    existing = (
+        WordTtsRender.objects.filter(owner=request.user, cache_key=cache_key)
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return JsonResponse(
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset", args=[existing.audio_id]
+                ),
+                "cached": True,
+                "duration_ms": existing.audio.duration_ms,
+            }
+        )
+
+    try:
+        consume_tts_quota(request.user, len(token.surface))
+        result = provider.synthesize(token.surface, speed=speed, style=style)
+        render = create_word_tts_render(
+            owner=request.user,
+            sentence=token.sentence,
+            word=token.surface,
+            result=result,
+            cache_key=cache_key,
+        )
+    except TTSQuotaExceeded as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "单词发音生成失败，请稍后再试。"},
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "audio_url": reverse("serve_audio_asset", args=[render.audio_id]),
+            "cached": False,
+            "duration_ms": result.duration_ms,
+        }
+    )
 
 
 @login_required

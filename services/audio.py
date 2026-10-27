@@ -19,7 +19,7 @@ MAX_DURATION_SECONDS = 60
 MIN_DURATION_SECONDS = 0.2
 MAX_AUDIO_BYTES = 5 * 1024 * 1024
 _ALLOWED_EXTENSIONS = {"wav", "mp3"}
-_PURPOSES = {"recordings", "tts", "assessments"}
+_PURPOSES = {"recordings", "tts", "word_tts", "assessments"}
 
 
 class AudioValidationError(ValueError):

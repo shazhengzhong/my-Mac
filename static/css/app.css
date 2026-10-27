@@ -843,6 +843,67 @@ button.button {
   overflow-wrap: anywhere;
 }
 
+.word-play {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dotted #b9c4bd;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.word-play::after {
+  content: " ▶";
+  color: var(--muted);
+  font-size: 0.62em;
+}
+
+.word-play:hover,
+.word-play:focus-visible {
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent-dark);
+}
+
+.word-play:hover::after,
+.word-play:focus-visible::after {
+  color: var(--accent-dark);
+}
+
+.word-play:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.word-play-status {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.word-play-status:empty {
+  display: none;
+}
+
+.word-play-status[data-kind="loading"],
+.word-play-status[data-kind="playing"] {
+  color: var(--accent-dark);
+}
+
+.word-play-status[data-kind="error"] {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.word-play-status audio {
+  display: block;
+  width: 100%;
+  max-width: 12rem;
+  margin-top: 0.2rem;
+}
+
 .ipa {
   color: var(--accent-dark);
   font-family: "Charis SIL", "Doulos SIL", "Lucida Sans Unicode",

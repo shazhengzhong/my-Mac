@@ -23,6 +23,7 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             VOLCENGINE_TTS_SAMPLE_RATE=24_000,
             VOLCENGINE_TTS_NORMAL_SPEECH_RATE=-20,
             VOLCENGINE_TTS_SLOW_SPEECH_RATE=-35,
+            VOLCENGINE_TTS_WORD_SPEECH_RATE=0,
             ASSESSMENT_PROVIDER="mock",
             TENCENTCLOUD_SECRET_ID="",
             TENCENTCLOUD_SECRET_KEY="",

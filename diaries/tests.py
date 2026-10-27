@@ -55,6 +55,7 @@ from .models import (
     TtsRender,
     UsageCounter,
     WordToken,
+    WordTtsRender,
 )
 from .services import create_aligned_english_version, create_english_version
 
@@ -863,6 +864,96 @@ class TTSFlowTests(AudioTestBase):
         self.assertFalse(TtsRender.objects.exists())
 
 
+class WordTTSFlowTests(AudioTestBase):
+    def _token(self):
+        _, sentence = self.make_sentence()
+        return sentence.tokens.get(surface="water")
+
+    def test_word_tts_generates_private_audio_and_cache(self):
+        token = self._token()
+        url = reverse("word_tts", args=[token.id])
+
+        first = self.client.post(url)
+        self.assertEqual(first.status_code, 200)
+        payload = first.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["cached"])
+        self.assertIn("/diaries/audio/", payload["audio_url"])
+
+        render = WordTtsRender.objects.get(owner=self.owner)
+        self.assertEqual(render.target_word, "water")
+        self.assertEqual(render.provider, "mock")
+        self.assertEqual(render.audio.purpose, AudioAsset.Purpose.WORD_TTS)
+        path = Path(self.media_dir.name) / render.audio.relative_path
+        self.assertTrue(path.exists())
+
+        audio = self.client.get(payload["audio_url"])
+        self.assertEqual(audio.status_code, 200)
+        self.assertEqual(audio["Content-Type"], "audio/wav")
+
+        counter = UsageCounter.objects.get(user=self.owner, feature="tts")
+        self.assertEqual(counter.request_count, 1)
+        self.assertEqual(counter.char_count, len("water"))
+
+        second = self.client.post(url)
+        self.assertEqual(second.status_code, 200)
+        second_payload = second.json()
+        self.assertTrue(second_payload["cached"])
+        self.assertEqual(second_payload["audio_url"], payload["audio_url"])
+        self.assertEqual(WordTtsRender.objects.count(), 1)
+        counter.refresh_from_db()
+        self.assertEqual(counter.request_count, 1)
+
+    def test_word_tts_cache_is_per_user(self):
+        token = self._token()
+        self.client.post(reverse("word_tts", args=[token.id]))
+
+        _, member_sentence = self.make_sentence(self.member)
+        member_token = member_sentence.tokens.get(surface="water")
+        self.client.force_login(self.member, backend=MODEL_BACKEND)
+        response = self.client.post(reverse("word_tts", args=[member_token.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+        self.assertEqual(WordTtsRender.objects.count(), 2)
+
+    def test_cross_user_and_anonymous_cannot_generate_word_tts(self):
+        _, sentence = self.make_sentence(self.member)
+        token = sentence.tokens.get(surface="water")
+        url = reverse("word_tts", args=[token.id])
+
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 404)
+
+        self.client.logout()
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+
+    @override_settings(TTS_DAILY_CHAR_LIMIT=0)
+    def test_word_tts_quota_blocks_generation(self):
+        token = self._token()
+        response = self.client.post(reverse("word_tts", args=[token.id]))
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("字符额度", response.json()["error"])
+        self.assertFalse(WordTtsRender.objects.exists())
+
+    def test_word_tts_requires_post(self):
+        token = self._token()
+        response = self.client.get(reverse("word_tts", args=[token.id]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_deleting_diary_removes_word_tts_audio(self):
+        diary, sentence = self.make_sentence()
+        token = sentence.tokens.get(surface="water")
+        self.client.post(reverse("word_tts", args=[token.id]))
+        render = WordTtsRender.objects.get(owner=self.owner)
+        path = Path(self.media_dir.name) / render.audio.relative_path
+        self.assertTrue(path.exists())
+
+        self.client.post(reverse("diary_delete", args=[diary.id]))
+        self.assertFalse(path.exists())
+        self.assertFalse(WordTtsRender.objects.exists())
+
+
 class VolcengineTTSServiceTests(TestCase):
     PCM = b"\x00\x01" * 24_000  # one second at 24 kHz, 16-bit mono
 
@@ -966,6 +1057,23 @@ class VolcengineTTSServiceTests(TestCase):
 
         audio = captured["payload"]["req_params"]["audio_params"]
         self.assertEqual(audio["speech_rate"], -20)
+
+    def test_word_speed_uses_word_rate(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=self._sse_body(self.PCM),
+            )
+
+        provider = self._provider(handler, word_speech_rate=10)
+        provider.synthesize("water", speed="word", style="natural")
+
+        audio = captured["payload"]["req_params"]["audio_params"]
+        self.assertEqual(audio["speech_rate"], 10)
 
     def test_slow_speed_uses_lower_speech_rate(self):
         captured = {}
