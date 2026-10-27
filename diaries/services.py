@@ -14,6 +14,7 @@ from .models import (
     AudioAsset,
     DiaryEntry,
     EnglishVersion,
+    PronunciationAttempt,
     Recording,
     Sentence,
     TtsRender,
@@ -29,6 +30,10 @@ class TranslationQuotaExceeded(Exception):
 
 class TTSQuotaExceeded(Exception):
     """The user has reached the configured daily TTS character limit."""
+
+
+class AssessmentQuotaExceeded(Exception):
+    """The user has reached the configured daily assessment request limit."""
 
 
 def consume_translation_quota(user, char_count: int) -> None:
@@ -66,6 +71,71 @@ def consume_tts_quota(user, char_count: int) -> None:
         counter.request_count += 1
         counter.char_count += requested
         counter.save(update_fields=["request_count", "char_count"])
+
+
+def consume_assessment_quota(user, word: str) -> None:
+    """Reserve one word assessment before making an external paid call."""
+    limit = settings.ASSESSMENT_DAILY_REQUEST_LIMIT
+    today = timezone.localdate()
+    with transaction.atomic():
+        counter, _ = UsageCounter.objects.select_for_update().get_or_create(
+            user=user,
+            date=today,
+            feature="assessment",
+        )
+        if counter.request_count >= limit:
+            raise AssessmentQuotaExceeded(
+                f"今天最多测评 {limit} 次，请明天再试。"
+            )
+        counter.request_count += 1
+        counter.char_count += len(word or "")
+        counter.save(update_fields=["request_count", "char_count"])
+
+
+def create_pronunciation_attempt(
+    *,
+    owner,
+    word_token,
+    data: bytes,
+    duration_ms: int,
+    result,
+) -> PronunciationAttempt:
+    """Store a private word recording and its assessment result atomically."""
+    relative_path, digest, byte_size = write_private_bytes(
+        owner_id=owner.pk,
+        purpose="assessments",
+        data=data,
+        extension="wav",
+    )
+    try:
+        with transaction.atomic():
+            asset = AudioAsset.objects.create(
+                owner=owner,
+                sentence=word_token.sentence,
+                purpose=AudioAsset.Purpose.ASSESSMENT,
+                relative_path=relative_path,
+                content_type="audio/wav",
+                byte_size=byte_size,
+                duration_ms=duration_ms,
+                sha256=digest,
+            )
+            return PronunciationAttempt.objects.create(
+                owner=owner,
+                word_token=word_token,
+                audio=asset,
+                target_word=word_token.surface,
+                provider=result.provider,
+                model=result.model,
+                overall_score=result.overall_score,
+                accuracy=result.accuracy,
+                fluency=result.fluency,
+                completeness=result.completeness,
+                match_tag=result.match_tag,
+                detail=result.detail,
+            )
+    except Exception:
+        remove_private_bytes(relative_path)
+        raise
 
 
 def create_recording(

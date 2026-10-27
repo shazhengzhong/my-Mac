@@ -31,5 +31,10 @@ urlpatterns = [
         views.upload_recording,
         name="upload_recording",
     ),
+    path(
+        "words/<uuid:token_id>/assess/",
+        views.assess_word,
+        name="assess_word",
+    ),
     path("audio/<uuid:asset_id>/", views.serve_audio_asset, name="serve_audio_asset"),
 ]

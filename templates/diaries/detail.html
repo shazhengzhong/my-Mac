@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}{{ diary.display_title }} · 家庭英语日记{% endblock %}
 {% block content %}
   <div class="page-heading">
@@ -64,6 +65,18 @@
         <div class="notice warning">{{ tts.message }}</div>
       {% endif %}
 
+      {% if assessment.is_mock %}
+        <div class="notice">
+          当前<strong>单词测评是模拟模式</strong>：会返回固定分数，不联网、不产生费用。点击单词旁的「测评」，读 3 秒即可。
+        </div>
+      {% elif not assessment.ready %}
+        <div class="notice warning">{{ assessment.message }}</div>
+      {% else %}
+        <div class="notice">
+          点击单词旁的「测评」，朗读 3 秒后会显示准确度和综合得分。每次会消耗一次腾讯云调用。
+        </div>
+      {% endif %}
+
       <ol class="sentence-list">
         {% for sentence in sentences %}
           <li class="sentence-card" id="sentence-{{ sentence.id }}">
@@ -80,6 +93,20 @@
                     <span class="ipa">/{{ token.ipa }}/</span>
                   {% else %}
                     <span class="ipa unknown">未收录</span>
+                  {% endif %}
+                  {% if assessment.ready %}
+                    <button
+                      class="assess-button"
+                      type="button"
+                      data-assess-button
+                      data-assess-url="{% url 'assess_word' token.id %}"
+                      data-word="{{ token.surface }}"
+                    >测评</button>
+                    <span class="assess-result" role="status" aria-live="polite">
+                      {% if token.latest_assessment %}
+                        准确度 {{ token.latest_assessment.accuracy|floatformat:0 }}{% if token.latest_assessment.overall_score is not None %} · 综合 {{ token.latest_assessment.overall_score|floatformat:0 }}{% endif %}
+                      {% endif %}
+                    </span>
                   {% endif %}
                 </span>
               {% empty %}
@@ -174,4 +201,7 @@
       </div>
     {% endif %}
   </section>
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'js/word-assessor.js' %}" defer></script>
 {% endblock %}

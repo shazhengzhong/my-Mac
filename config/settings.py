@@ -27,6 +27,13 @@ def env_int(name: str, default: int) -> int:
         raise ImproperlyConfigured(f"{name} must be an integer") from exc
 
 
+def env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be a number") from exc
+
+
 def env_list(name: str, default: str = "") -> list[str]:
     raw = os.getenv(name, default)
     return [item.strip() for item in raw.split(",") if item.strip()]
@@ -194,6 +201,16 @@ VOLCENGINE_TTS_SLOW_SPEECH_RATE = env_int("VOLCENGINE_TTS_SLOW_SPEECH_RATE", -35
 
 TRANSLATION_DAILY_REQUEST_LIMIT = env_int("TRANSLATION_DAILY_REQUEST_LIMIT", 20)
 TTS_DAILY_CHAR_LIMIT = env_int("TTS_DAILY_CHAR_LIMIT", 5000)
+
+# Word-level pronunciation assessment. Mock by default; Tencent SOE when configured.
+ASSESSMENT_PROVIDER = os.getenv("ASSESSMENT_PROVIDER", "mock").strip().lower()
+ASSESSMENT_DAILY_REQUEST_LIMIT = env_int("ASSESSMENT_DAILY_REQUEST_LIMIT", 30)
+TENCENTCLOUD_SECRET_ID = os.getenv("TENCENTCLOUD_SECRET_ID", "").strip()
+TENCENTCLOUD_SECRET_KEY = os.getenv("TENCENTCLOUD_SECRET_KEY", "").strip()
+TENCENT_SOE_APP_ID = os.getenv("TENCENT_SOE_APP_ID", "").strip()
+TENCENT_SOE_ENGINE = os.getenv("TENCENT_SOE_ENGINE", "16k_en").strip()
+TENCENT_SOE_SCORE_COEFF = env_float("TENCENT_SOE_SCORE_COEFF", 1.0)
+TENCENT_SOE_TIMEOUT = env_int("TENCENT_SOE_TIMEOUT", 20)
 
 # The test suite must never reach a paid provider, even when .env enables one.
 TEST_RUNNER = "config.test_runner.OfflineProvidersTestRunner"

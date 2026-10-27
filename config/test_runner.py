@@ -23,6 +23,12 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             VOLCENGINE_TTS_SAMPLE_RATE=24_000,
             VOLCENGINE_TTS_NORMAL_SPEECH_RATE=-20,
             VOLCENGINE_TTS_SLOW_SPEECH_RATE=-35,
+            ASSESSMENT_PROVIDER="mock",
+            TENCENTCLOUD_SECRET_ID="",
+            TENCENTCLOUD_SECRET_KEY="",
+            TENCENT_SOE_APP_ID="",
+            TENCENT_SOE_ENGINE="16k_en",
+            TENCENT_SOE_SCORE_COEFF=1.0,
         )
         self._offline_override.enable()
         super().setup_test_environment(**kwargs)

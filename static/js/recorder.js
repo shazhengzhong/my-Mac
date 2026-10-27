@@ -2,6 +2,10 @@
   "use strict";
 
   const controls = Array.from(document.querySelectorAll("[data-record-control]"));
+
+  // Shared with word-assessor.js on the diary detail page.
+  window.FamilyAudio = { chooseMimeType, convertToWav, getCookie };
+
   if (controls.length === 0) {
     return;
   }

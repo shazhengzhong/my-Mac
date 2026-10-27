@@ -1,10 +1,13 @@
 """Diary ownership, translation, IPA, versioning, and quota tests."""
 
 import base64
+import hashlib
+import hmac
 import io
 import json
 from pathlib import Path
 import tempfile
+from urllib.parse import parse_qs, urlparse
 import wave
 
 import httpx
@@ -14,6 +17,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Family, User
+from services.assessment import (
+    AssessmentError,
+    MockAssessor,
+    TencentSOEAssessor,
+    get_assessor,
+)
 from services.audio import (
     AudioValidationError,
     RangeNotSatisfiable,
@@ -39,6 +48,7 @@ from .models import (
     AudioAsset,
     DiaryEntry,
     EnglishVersion,
+    PronunciationAttempt,
     Recording,
     Sentence,
     TtsRender,
@@ -909,3 +919,297 @@ class VolcengineTTSServiceTests(TestCase):
     def test_get_provider_refuses_missing_configuration(self):
         with self.assertRaises(TTSError):
             get_tts_provider()
+
+
+class AssessmentServiceTests(TestCase):
+    def test_mock_assessor_returns_scores_without_network(self):
+        result = MockAssessor().assess("water", b"audio-bytes")
+        self.assertEqual(result.provider, "mock")
+        self.assertEqual(result.overall_score, 86.0)
+        self.assertEqual(result.accuracy, 88.0)
+        self.assertEqual(result.fluency, 82.0)
+        self.assertEqual(result.completeness, 100.0)
+        self.assertTrue(result.detail["mock"])
+
+    def test_default_assessor_is_mock(self):
+        self.assertIsInstance(get_assessor(), MockAssessor)
+
+    def test_tencent_signed_url_has_word_mode_and_valid_signature(self):
+        assessor = TencentSOEAssessor(
+            app_id="125922",
+            secret_id="secret-id",
+            secret_key="secret-key",
+        )
+        url = assessor._build_signed_url(
+            "hello",
+            voice_id="voice-1",
+            timestamp=1722321759,
+            nonce="42261112",
+            expired=1722408159,
+        )
+        parsed = urlparse(url)
+        self.assertEqual(parsed.scheme, "wss")
+        self.assertEqual(parsed.netloc, "soe.cloud.tencent.com")
+        self.assertEqual(parsed.path, "/soe/api/125922")
+
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        signature = query.pop("signature")[0]
+        self.assertEqual(query["eval_mode"], ["0"])
+        self.assertEqual(query["server_engine_type"], ["16k_en"])
+        self.assertEqual(query["voice_format"], ["1"])
+        self.assertEqual(query["rec_mode"], ["1"])
+        self.assertEqual(query["ref_text"], ["hello"])
+        self.assertEqual(query["secretid"], ["secret-id"])
+        self.assertEqual(query["voice_id"], ["voice-1"])
+        self.assertEqual(query["timestamp"], ["1722321759"])
+        self.assertEqual(query["expired"], ["1722408159"])
+        self.assertEqual(query["nonce"], ["42261112"])
+        self.assertEqual(query["score_coeff"], ["1.0"])
+        self.assertEqual(query["text_mode"], ["0"])
+        self.assertEqual(query["sentence_info_enabled"], ["0"])
+        self.assertEqual(query["keyword"], [""])
+
+        source = "soe.cloud.tencent.com/soe/api/125922?" + "&".join(
+            f"{key}={values[0]}" for key, values in sorted(query.items())
+        )
+        expected = base64.b64encode(
+            hmac.new(b"secret-key", source.encode("utf-8"), hashlib.sha1).digest()
+        ).decode("ascii")
+        self.assertEqual(signature, expected)
+
+    def test_tencent_assessor_sends_audio_and_parses_final_result(self):
+        class FakeConnection:
+            def __init__(self, messages):
+                self.messages = list(messages)
+                self.sent = []
+                self.closed = False
+
+            def send_binary(self, data):
+                self.sent.append(("binary", data))
+
+            def send(self, data):
+                self.sent.append(("text", data))
+
+            def recv(self):
+                return self.messages.pop(0)
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeConnection(
+            [
+                json.dumps({"code": 0, "final": 0, "result": None}),
+                json.dumps(
+                    {
+                        "code": 0,
+                        "final": 1,
+                        "result": {
+                            "SuggestedScore": 92,
+                            "PronAccuracy": 90,
+                            "PronFluency": 88,
+                            "PronCompletion": 100,
+                            "MatchTag": 0,
+                            "Phone": [{"Phone": "w"}],
+                            "Stress": 1,
+                            "DetectedStress": 0,
+                        },
+                    }
+                ),
+            ]
+        )
+        captured = {}
+
+        def factory(url, timeout):
+            captured["url"] = url
+            captured["timeout"] = timeout
+            return fake
+
+        assessor = TencentSOEAssessor(
+            app_id="app",
+            secret_id="sid",
+            secret_key="skey",
+            connection_factory=factory,
+        )
+        result = assessor.assess("water", b"wav-bytes")
+
+        self.assertEqual(result.overall_score, 92.0)
+        self.assertEqual(result.accuracy, 90.0)
+        self.assertEqual(result.fluency, 88.0)
+        self.assertEqual(result.completeness, 100.0)
+        self.assertEqual(result.match_tag, 0)
+        self.assertEqual(result.detail["phones"], [{"Phone": "w"}])
+        self.assertEqual(fake.sent[0], ("binary", b"wav-bytes"))
+        self.assertEqual(json.loads(fake.sent[1][1]), {"type": "end"})
+        self.assertTrue(fake.closed)
+        self.assertIn("eval_mode=0", captured["url"])
+        self.assertEqual(captured["timeout"], 20)
+
+    def test_tencent_assessor_maps_oov_error(self):
+        class FakeConnection:
+            def __init__(self):
+                self.closed = False
+
+            def send_binary(self, data):
+                pass
+
+            def send(self, data):
+                pass
+
+            def recv(self):
+                return json.dumps({"code": 4103, "message": "OOV", "final": 1})
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeConnection()
+        assessor = TencentSOEAssessor(
+            app_id="app",
+            secret_id="sid",
+            secret_key="skey",
+            connection_factory=lambda url, timeout: fake,
+        )
+        with self.assertRaises(AssessmentError) as raised:
+            assessor.assess("shazhengzhong", b"audio")
+        self.assertIn("词典", str(raised.exception))
+        self.assertTrue(fake.closed)
+
+    @override_settings(
+        ASSESSMENT_PROVIDER="tencent",
+        TENCENT_SOE_APP_ID="",
+        TENCENTCLOUD_SECRET_ID="",
+        TENCENTCLOUD_SECRET_KEY="",
+    )
+    def test_tencent_requires_credentials(self):
+        with self.assertRaises(AssessmentError):
+            get_assessor()
+
+
+class AssessmentFlowTests(AudioTestBase):
+    def _upload(self, duration_ms=500, filename="word.wav"):
+        return SimpleUploadedFile(
+            filename,
+            self.wav_bytes(duration_ms),
+            content_type="audio/wav",
+        )
+
+    def test_mock_assessment_creates_private_attempt_and_scores(self):
+        diary, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        response = self.client.post(
+            reverse("assess_word", args=[token.id]),
+            {"audio": self._upload()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["overall_score"], 86.0)
+        self.assertEqual(payload["accuracy"], 88.0)
+
+        attempt = PronunciationAttempt.objects.get(owner=self.owner, word_token=token)
+        self.assertEqual(attempt.target_word, token.surface)
+        self.assertEqual(attempt.provider, "mock")
+        self.assertEqual(attempt.audio.purpose, AudioAsset.Purpose.ASSESSMENT)
+        path = Path(self.media_dir.name) / attempt.audio.relative_path
+        self.assertTrue(path.exists())
+
+        audio = self.client.get(payload["audio_url"])
+        self.assertEqual(audio.status_code, 200)
+        self.assertEqual(audio["Content-Type"], "audio/wav")
+
+        counter = UsageCounter.objects.get(user=self.owner, feature="assessment")
+        self.assertEqual(counter.request_count, 1)
+        self.assertEqual(counter.char_count, len(token.surface))
+
+    def test_cross_user_and_anonymous_cannot_assess(self):
+        _, sentence = self.make_sentence(self.member)
+        token = sentence.tokens.first()
+        url = reverse("assess_word", args=[token.id])
+
+        response = self.client.post(url, {"audio": self._upload()})
+        self.assertEqual(response.status_code, 404)
+
+        self.client.logout()
+        response = self.client.post(url, {"audio": self._upload()})
+        self.assertEqual(response.status_code, 302)
+
+    def test_rejects_invalid_audio(self):
+        _, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        upload = SimpleUploadedFile("bad.txt", b"not audio", content_type="text/plain")
+        response = self.client.post(
+            reverse("assess_word", args=[token.id]),
+            {"audio": upload},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PronunciationAttempt.objects.exists())
+
+    def test_rejects_audio_longer_than_ten_seconds(self):
+        _, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        response = self.client.post(
+            reverse("assess_word", args=[token.id]),
+            {"audio": self._upload(duration_ms=11_000)},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("10", response.json()["error"])
+        self.assertFalse(PronunciationAttempt.objects.exists())
+
+    @override_settings(ASSESSMENT_DAILY_REQUEST_LIMIT=1)
+    def test_assessment_quota_blocks_second_attempt(self):
+        _, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        url = reverse("assess_word", args=[token.id])
+
+        first = self.client.post(url, {"audio": self._upload()})
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.post(url, {"audio": self._upload()})
+        self.assertEqual(second.status_code, 429)
+        self.assertIn("最多测评 1 次", second.json()["error"])
+        self.assertEqual(PronunciationAttempt.objects.count(), 1)
+
+    def test_assessment_requires_post(self):
+        _, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        response = self.client.get(reverse("assess_word", args=[token.id]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_cross_user_cannot_access_assessment_audio(self):
+        _, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        response = self.client.post(
+            reverse("assess_word", args=[token.id]),
+            {"audio": self._upload()},
+        )
+        attempt = PronunciationAttempt.objects.get(owner=self.owner)
+        url = reverse("serve_audio_asset", args=[attempt.audio_id])
+
+        self.client.force_login(self.member, backend=MODEL_BACKEND)
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_deleting_diary_removes_assessment_audio(self):
+        diary, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        self.client.post(
+            reverse("assess_word", args=[token.id]),
+            {"audio": self._upload()},
+        )
+        attempt = PronunciationAttempt.objects.get(owner=self.owner)
+        path = Path(self.media_dir.name) / attempt.audio.relative_path
+        self.assertTrue(path.exists())
+
+        self.client.post(reverse("diary_delete", args=[diary.id]))
+        self.assertFalse(path.exists())
+        self.assertFalse(PronunciationAttempt.objects.exists())
+
+    def test_latest_score_is_rendered_on_detail_page(self):
+        diary, sentence = self.make_sentence()
+        token = sentence.tokens.first()
+        self.client.post(
+            reverse("assess_word", args=[token.id]),
+            {"audio": self._upload()},
+        )
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "准确度")
+        self.assertContains(response, "86")

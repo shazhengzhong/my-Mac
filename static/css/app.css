@@ -765,6 +765,57 @@ button.button {
   font-size: 0.78rem;
 }
 
+.assess-button {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid #d5ddd2;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-dark);
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.assess-button:hover,
+.assess-button:focus-visible {
+  border-color: var(--accent-dark);
+  background: rgba(47, 107, 79, 0.08);
+}
+
+.assess-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.assess-result {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.assess-result[data-kind="recording"] {
+  color: var(--accent-dark);
+}
+
+.assess-result[data-kind="success"] {
+  color: var(--accent-dark);
+  font-weight: 650;
+}
+
+.assess-result[data-kind="error"] {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.assess-play {
+  color: var(--accent-dark);
+  text-decoration: underline;
+}
+
 .ipa-grid {
   display: grid;
   grid-template-columns: 1fr;

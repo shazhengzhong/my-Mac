@@ -12,25 +12,37 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST, require_http_methods
 
+from services.assessment import AssessmentError, get_assessor
 from services.audio import (
     MAX_AUDIO_BYTES,
     AudioValidationError,
     RangeNotSatisfiable,
     parse_byte_range,
     read_private_bytes,
+    validate_assessment_wav,
     validate_recording_wav,
 )
 from services.translation import TranslationError, get_translator
 from services.tts import TTSError, get_tts_provider, tts_cache_key
 
 from .forms import DiaryForm, EnglishVersionForm, IpaCorrectionForm
-from .models import AudioAsset, DiaryEntry, Sentence, TtsRender, WordToken
+from .models import (
+    AudioAsset,
+    DiaryEntry,
+    PronunciationAttempt,
+    Sentence,
+    TtsRender,
+    WordToken,
+)
 from .services import (
+    AssessmentQuotaExceeded,
     TTSQuotaExceeded,
     TranslationQuotaExceeded,
+    consume_assessment_quota,
     consume_translation_quota,
     consume_tts_quota,
     create_english_version,
+    create_pronunciation_attempt,
     create_recording,
     create_tts_render,
 )
@@ -45,6 +57,14 @@ def _owned_sentence(request, sentence_id) -> Sentence:
         Sentence.objects.select_related("version__diary"),
         pk=sentence_id,
         version__diary__owner=request.user,
+    )
+
+
+def _owned_token(request, token_id) -> WordToken:
+    return get_object_or_404(
+        WordToken.objects.select_related("sentence__version__diary"),
+        pk=token_id,
+        sentence__version__diary__owner=request.user,
     )
 
 
@@ -103,6 +123,38 @@ def _tts_status() -> dict:
         "is_mock": False,
         "ready": False,
         "message": "语音服务配置异常。",
+    }
+
+
+def _assessment_status() -> dict:
+    provider = settings.ASSESSMENT_PROVIDER
+    if provider == "mock":
+        return {
+            "is_mock": True,
+            "ready": True,
+            "message": "当前是模拟单词测评，不联网、不产生费用。",
+        }
+    if provider == "tencent":
+        ready = bool(
+            settings.TENCENT_SOE_APP_ID
+            and settings.TENCENTCLOUD_SECRET_ID
+            and settings.TENCENTCLOUD_SECRET_KEY
+        )
+        if not ready:
+            return {
+                "is_mock": False,
+                "ready": False,
+                "message": "腾讯云口语评测尚未配置完整凭据。",
+            }
+        return {
+            "is_mock": False,
+            "ready": True,
+            "message": "真实单词测评已启用；每次会消耗腾讯云调用次数。",
+        }
+    return {
+        "is_mock": False,
+        "ready": False,
+        "message": "单词测评服务配置异常。",
     }
 
 
@@ -183,9 +235,23 @@ def diary_detail(request, diary_id):
             sentence_id__in=sentence_ids,
         ).select_related("audio")
         tts_map = {(render.sentence_id, render.speed): render for render in renders}
+    assessment_map = {}
+    if sentences:
+        attempts = (
+            PronunciationAttempt.objects.filter(
+                owner=request.user,
+                word_token__sentence_id__in=[sentence.id for sentence in sentences],
+            )
+            .select_related("audio")
+            .order_by("word_token_id", "-created_at")
+        )
+        for attempt in attempts:
+            assessment_map.setdefault(attempt.word_token_id, attempt)
     for sentence in sentences:
         sentence.tts_normal = tts_map.get((sentence.id, TtsRender.Speed.NORMAL))
         sentence.tts_slow = tts_map.get((sentence.id, TtsRender.Speed.SLOW))
+        for token in sentence.tokens.all():
+            token.latest_assessment = assessment_map.get(token.id)
 
     return render(
         request,
@@ -197,6 +263,7 @@ def diary_detail(request, diary_id):
             "previous_count": previous_count,
             "translation": _translation_status(),
             "tts": _tts_status(),
+            "assessment": _assessment_status(),
         },
     )
 
@@ -360,6 +427,70 @@ def generate_sentence_tts(request, sentence_id, speed):
     else:
         messages.success(request, "示范音频已生成并缓存。")
     return _sentence_redirect(sentence.version.diary_id, sentence.id)
+
+
+@login_required
+@require_POST
+@never_cache
+def assess_word(request, token_id):
+    token = _owned_token(request, token_id)
+    uploaded = request.FILES.get("audio")
+    if uploaded is None:
+        return JsonResponse({"ok": False, "error": "没有收到录音文件。"}, status=400)
+
+    data = uploaded.read()
+    try:
+        duration_ms = validate_assessment_wav(data)
+    except AudioValidationError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    try:
+        assessor = get_assessor()
+    except AssessmentError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
+
+    try:
+        consume_assessment_quota(request.user, token.surface)
+    except AssessmentQuotaExceeded as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
+
+    try:
+        result = assessor.assess(token.surface, data)
+    except AssessmentError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "单词测评失败，请稍后再试。"},
+            status=500,
+        )
+
+    try:
+        attempt = create_pronunciation_attempt(
+            owner=request.user,
+            word_token=token,
+            data=data,
+            duration_ms=duration_ms,
+            result=result,
+        )
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "测评结果保存失败，请稍后再试。"},
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "attempt_id": str(attempt.id),
+            "overall_score": result.overall_score,
+            "accuracy": result.accuracy,
+            "fluency": result.fluency,
+            "completeness": result.completeness,
+            "match_tag": result.match_tag,
+            "detail": result.detail,
+            "audio_url": reverse("serve_audio_asset", args=[attempt.audio_id]),
+        }
+    )
 
 
 @login_required

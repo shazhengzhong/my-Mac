@@ -19,7 +19,7 @@ MAX_DURATION_SECONDS = 60
 MIN_DURATION_SECONDS = 0.2
 MAX_AUDIO_BYTES = 5 * 1024 * 1024
 _ALLOWED_EXTENSIONS = {"wav", "mp3"}
-_PURPOSES = {"recordings", "tts"}
+_PURPOSES = {"recordings", "tts", "assessments"}
 
 
 class AudioValidationError(ValueError):
@@ -30,7 +30,9 @@ class RangeNotSatisfiable(ValueError):
     """The requested byte range cannot be served."""
 
 
-def validate_recording_wav(data: bytes) -> int:
+def validate_recording_wav(
+    data: bytes, *, max_duration_seconds: int = MAX_DURATION_SECONDS
+) -> int:
     """Validate a browser recording and return its duration in milliseconds."""
     if not data:
         raise AudioValidationError("录音文件为空。")
@@ -56,9 +58,14 @@ def validate_recording_wav(data: bytes) -> int:
 
     if duration < MIN_DURATION_SECONDS:
         raise AudioValidationError("录音太短，请至少朗读半秒钟。")
-    if duration > MAX_DURATION_SECONDS:
-        raise AudioValidationError("录音不能超过 60 秒。")
+    if duration > max_duration_seconds:
+        raise AudioValidationError(f"录音不能超过 {max_duration_seconds} 秒。")
     return int(round(duration * 1000))
+
+
+def validate_assessment_wav(data: bytes) -> int:
+    """Validate a short word-assessment recording (max 10 seconds)."""
+    return validate_recording_wav(data, max_duration_seconds=10)
 
 
 def _private_root() -> Path:

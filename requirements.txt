@@ -16,5 +16,6 @@ setuptools==84.2.1
 sqlparse==0.6.0
 syllabify==0.5.1
 typing_extensions==4.16.0
+websocket-client==1.8.0
 wheel==0.48.0
 zipp==4.1.2

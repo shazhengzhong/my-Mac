@@ -161,6 +161,7 @@ class AudioAsset(models.Model):
     class Purpose(models.TextChoices):
         RECORDING = "recording", "用户录音"
         TTS = "tts", "示范朗读"
+        ASSESSMENT = "assessment", "单词测评"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -254,6 +255,41 @@ class TtsRender(models.Model):
 
     def __str__(self) -> str:
         return f"{self.speed} TTS {self.id}"
+
+
+class PronunciationAttempt(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pronunciation_attempts",
+    )
+    word_token = models.ForeignKey(
+        WordToken,
+        on_delete=models.CASCADE,
+        related_name="assessment_attempts",
+    )
+    audio = models.OneToOneField(
+        AudioAsset,
+        on_delete=models.CASCADE,
+        related_name="pronunciation_attempt",
+    )
+    target_word = models.CharField(max_length=120)
+    provider = models.CharField(max_length=40)
+    model = models.CharField(max_length=100)
+    overall_score = models.FloatField(null=True, blank=True)
+    accuracy = models.FloatField(null=True, blank=True)
+    fluency = models.FloatField(null=True, blank=True)
+    completeness = models.FloatField(null=True, blank=True)
+    match_tag = models.PositiveSmallIntegerField(null=True, blank=True)
+    detail = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"测评 {self.target_word} {self.id}"
 
 
 @receiver(post_delete, sender=AudioAsset)

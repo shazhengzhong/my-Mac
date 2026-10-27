@@ -2,8 +2,8 @@
 
 给家人私用的英语口语练习网页：写中文日记，生成自然美式英文、单词级美式音标，自己录音后回放对比。
 
-> 当前阶段：**M4 DeepSeek 真实翻译已启用，火山 TTS 网页流程已通过**。
-> 真实情感人声和正式部署尚未接入；自动发音评分明确不做。
+> 当前阶段：**M4 DeepSeek/火山 TTS 已接通，M4.5 单词测评 mock 已可用（腾讯云 SOE 待凭据）**。
+> 正式部署尚未接入；只做单词级发音测评，不做整句自动评分或自动纠音建议。
 
 ## 已实现
 
@@ -143,6 +143,33 @@ VOLCENGINE_TTS_SLOW_SPEECH_RATE=-35
 - 每日字符额度由 `TTS_DAILY_CHAR_LIMIT` 控制。
 - 凭据只写在 `.env`，不要发到聊天或截图。
 
+## 单词发音测评
+
+每个单词旁边有「测评」按钮：点击后朗读 3 秒，自动停止并上传，页面显示准确度和综合得分。
+
+- 默认 `ASSESSMENT_PROVIDER=mock`：返回固定分数，不联网、不花钱，用来检查界面。
+- 真实评测使用腾讯云口语评测（新版 SOE-N），只做单词级，不做整句评分或自动纠音建议。
+- 单词录音会发送给腾讯云评分；整句录音仍然只保存在本项目服务器。
+
+真实评测配置（由你本人编辑 `.env`）：
+
+```text
+ASSESSMENT_PROVIDER=tencent
+TENCENT_SOE_APP_ID=你的腾讯云 AppID
+TENCENTCLOUD_SECRET_ID=你的 SecretId
+TENCENTCLOUD_SECRET_KEY=你的 SecretKey
+TENCENT_SOE_ENGINE=16k_en
+TENCENT_SOE_SCORE_COEFF=1.0
+ASSESSMENT_DAILY_REQUEST_LIMIT=30
+```
+
+注意：
+
+- 腾讯云口语评测基础版已停止新购，必须用新版 SOE（WebSocket）。
+- 费用参考：后付费约 5 元/千次；套餐 9.9 元/万次（1 个月）。一次单词测评算 1 次调用。
+- 首次真实测评只测一个单词，确认分数和费用后再继续。
+- SecretId/SecretKey 只写 `.env`，不要发到聊天或截图。
+
 ## 怎样试录音和示范朗读
 
 1. 启动本地网站并登录
@@ -164,14 +191,14 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-当前结果：**85 项测试全部通过**（2026-10-27），覆盖账号、邀请、恢复码、日记归属隔离、模拟翻译、DeepSeek 请求结构、句子拆分、音标、版本更新、每日翻译上限、录音 WAV 校验、音频越权拦截、HTTP Range 播放、模拟朗读缓存、TTS 字符额度，以及火山 TTS 的 SSE 解析、PCM→WAV 转换、两种鉴权、语速和错误映射。浏览器脚本另通过 `node --check` 语法检查。测试运行器会强制使用 mock，不会误触发付费调用。
+当前结果：**100 项测试全部通过**（2026-10-27），覆盖账号、邀请、恢复码、日记归属隔离、模拟翻译、DeepSeek 请求结构、句子拆分、音标、版本更新、每日翻译上限、录音 WAV 校验、音频越权拦截、HTTP Range 播放、模拟朗读缓存、TTS 字符额度、火山 TTS 的 SSE 解析、PCM→WAV 转换、两种鉴权、语速和错误映射，以及单词测评的 mock 评分、腾讯 SOE 签名/WebSocket 假连接、权限、额度、音频清理和分数展示。浏览器脚本另通过 `node --check` 语法检查。测试运行器会强制使用 mock，不会误触发付费调用。
 
 ## 配置与密钥
 
 - 本地配置保存在 `.env`，权限应为仅当前用户可读（`600`）。
 - `.env` 不会进入版本控制，也绝不能发到聊天或公开仓库。
-- DeepSeek 已切换为真实翻译；火山 TTS 已启用真实语音。
-- 真实 API Key 由用户本人写入 `.env`，不要发到聊天或截图。
+- DeepSeek 已切换为真实翻译；火山 TTS 已启用真实语音；单词测评默认仍是 mock。
+- 真实 API Key、SecretId、SecretKey 由用户本人写入 `.env`，不要发到聊天或截图。
 
 ## 重要限制
 
