@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · 家庭英语日记{% endblock %}
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">私人内容</p>
+    <h1>{{ heading }}</h1>
+    <p class="lead">中文会先保存在你的账号下。生成英文不会删除或覆盖其他账号的内容。</p>
+
+    <form method="post">
+      {% csrf_token %}
+      {% include "accounts/_form_fields.html" %}
+      <div class="actions">
+        <button class="button" type="submit">{{ submit_label }}</button>
+        {% if diary %}
+          <a class="link" href="{% url 'diary_detail' diary.id %}">取消</a>
+        {% else %}
+          <a class="link" href="{% url 'diary_list' %}">取消</a>
+        {% endif %}
+      </div>
+    </form>
+  </section>
+{% endblock %}

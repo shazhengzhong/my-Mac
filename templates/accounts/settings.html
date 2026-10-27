@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}账号设置 · 家庭英语日记{% endblock %}
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">个人账号</p>
+    <h1>账号设置</h1>
+
+    <dl class="meta-grid">
+      <div>
+        <dt>显示名</dt>
+        <dd>{{ user.display_name }}</dd>
+      </div>
+      <div>
+        <dt>手机号</dt>
+        <dd>{{ masked_phone }}</dd>
+      </div>
+      <div>
+        <dt>家庭</dt>
+        <dd>{{ user.family.name }}</dd>
+      </div>
+      <div>
+        <dt>角色</dt>
+        <dd>{{ user.get_role_display }}</dd>
+      </div>
+    </dl>
+
+    <div class="actions">
+      <a class="button secondary" href="{% url 'password_change' %}">修改密码</a>
+      <a class="link" href="{% url 'home' %}">返回首页</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>恢复码</h2>
+    <p>剩余可用恢复码：<strong>{{ active_recovery_codes }}</strong> 个。</p>
+    <p class="muted">恢复码用于忘记密码时找回账号。它只能使用一次，生成后只显示一次；重置一组新码会让旧码立即失效。</p>
+
+    {% if active_recovery_codes == 0 %}
+      <div class="notice warning">你目前没有可用的恢复码。建议现在生成一组并妥善保存。</div>
+    {% endif %}
+
+    <form method="post" action="{% url 'regenerate_recovery_codes' %}">
+      {% csrf_token %}
+      <button class="button" type="submit">生成新的恢复码（旧码立即失效）</button>
+    </form>
+
+    <p class="muted small">如果所有恢复码都丢失，家庭管理员也无法查看你的密码或替你恢复账号。</p>
+  </section>
+{% endblock %}

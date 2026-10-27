@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}校对音标 · 家庭英语日记{% endblock %}
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">单词级美式 IPA</p>
+    <h1>校对音标</h1>
+    <p class="english-sentence" lang="en">{{ sentence.text }}</p>
+    <p class="muted">输入时不带两侧斜杠也可以；留空会标记为“未收录”。这些修改只影响当前账号的这句话。</p>
+
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="form-errors" role="alert">
+          {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="ipa-grid">
+        {% for row in rows %}
+          <div class="ipa-row">
+            <label for="{{ row.field.id_for_label }}">{{ row.token.surface }}</label>
+            <div class="ipa-input-wrap">
+              <span aria-hidden="true">/</span>
+              {{ row.field }}
+              <span aria-hidden="true">/</span>
+            </div>
+            <span class="muted small">{{ row.token.get_source_display }}</span>
+            {% if row.field.errors %}
+              <ul class="errorlist" role="alert">
+                {% for error in row.field.errors %}<li>{{ error }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+          </div>
+        {% empty %}
+          <p class="muted">这一句没有可编辑的英文单词。</p>
+        {% endfor %}
+      </div>
+
+      <div class="actions">
+        <button class="button" type="submit">保存音标</button>
+        <a class="link" href="{% url 'diary_detail' sentence.version.diary_id %}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

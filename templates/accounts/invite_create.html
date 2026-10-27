@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}邀请家人 · 家庭英语日记{% endblock %}
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">家庭管理员</p>
+    <h1>邀请家人</h1>
+    <p class="lead">生成一个绑定手机号的一次性邀请码，然后单独发给家人。邀请码 7 天内有效。</p>
+
+    {% if invite_code %}
+      <div class="code-result" role="status">
+        <p><strong>新邀请码（只显示这一次）</strong></p>
+        <p class="code-box">{{ invite_code }}</p>
+        <p>请现在复制并发给受邀家人。关闭或刷新本页后，原邀请码无法再次显示。</p>
+        <p class="muted">有效期至：{{ invite_expires_at|date:"Y-m-d H:i" }}</p>
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'create_invitation' %}">
+      {% csrf_token %}
+      {% include "accounts/_form_fields.html" %}
+      <button class="button" type="submit">生成邀请码</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>待使用的邀请</h2>
+    {% if active_invitations %}
+      <ul class="simple-list">
+        {% for invitation in active_invitations %}
+          <li>
+            <span>{{ invitation.masked_phone }}</span>
+            <span class="muted">有效至 {{ invitation.expires_at|date:"Y-m-d H:i" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="muted">邀请码本身不会再次显示。如果丢失，可以为同一手机号生成新的邀请。</p>
+    {% else %}
+      <p class="muted">目前没有未使用的邀请。</p>
+    {% endif %}
+    <div class="actions">
+      <a class="button secondary" href="{% url 'members' %}">查看家庭成员</a>
+      <a class="link" href="{% url 'home' %}">返回首页</a>
+    </div>
+  </section>
+{% endblock %}

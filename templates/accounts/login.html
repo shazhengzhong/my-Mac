@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}登录 · 家庭英语日记{% endblock %}
+{% block content %}
+  <section class="card narrow">
+    <p class="eyebrow">仅家庭内部使用</p>
+    <h1>登录</h1>
+    <p class="lead">使用邀请时登记的手机号和密码登录。这个手机号不会收到短信验证码。</p>
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+      {% include "accounts/_form_fields.html" %}
+      <button class="button" type="submit">登录</button>
+    </form>
+
+    <div class="secondary-links">
+      <a href="{% url 'recovery_reset' %}">忘记密码？使用恢复码</a>
+      <span>第一次使用？</span>
+      <a href="{% url 'join' %}">凭家庭邀请码加入</a>
+    </div>
+  </section>
+{% endblock %}

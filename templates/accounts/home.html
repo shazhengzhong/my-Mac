@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}首页 · 家庭英语日记{% endblock %}
+{% block content %}
+  <section class="hero">
+    <p class="eyebrow">{{ user.family.name }}</p>
+    <h1>你好，{{ user.display_name }}</h1>
+    <p class="lead">这是你的私人练习空间。每个人的日记和录音只有本人能查看。</p>
+  </section>
+
+  {% if active_recovery_codes == 0 %}
+    <div class="notice warning">
+      你的账号还没有可用的恢复码。请马上去 <a href="{% url 'account_settings' %}">账号设置</a> 生成并保存。
+    </div>
+  {% endif %}
+
+  <div class="dashboard-grid">
+    <section class="card">
+      <p class="eyebrow">私人练习</p>
+      <h2>我的日记</h2>
+      <p>写中文日记、生成自然美式英文、查看美式音标。情感朗读和录音会在后续阶段加入。</p>
+      <p class="muted">目前共有 {{ diary_count }} 篇日记。只有你能查看自己的内容。</p>
+      <div class="actions">
+        <a class="button" href="{% url 'diary_list' %}">打开我的日记</a>
+        <a class="button secondary" href="{% url 'diary_create' %}">写新日记</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="eyebrow">账号</p>
+      <h2>安全与家人</h2>
+      <p>剩余恢复码：<strong>{{ active_recovery_codes }}</strong> 个</p>
+      <div class="actions">
+        <a class="button secondary" href="{% url 'account_settings' %}">账号设置</a>
+        {% if user.is_owner %}
+          <a class="button secondary" href="{% url 'create_invitation' %}">邀请家人</a>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  {% if user.is_owner %}
+    <section class="card">
+      <p class="eyebrow">家庭管理员</p>
+      <h2>家庭管理</h2>
+      <p>你可以发出邀请并查看家人显示名，但看不到他们的日记、翻译、音标或录音。</p>
+      <div class="actions">
+        <a class="button secondary" href="{% url 'members' %}">查看家庭成员</a>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

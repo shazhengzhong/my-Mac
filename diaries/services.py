@@ -1,0 +1,202 @@
+"""Domain services for English versions and daily provider limits."""
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.db.models import Max
+from django.utils import timezone
+
+from services.audio import remove_private_bytes, write_private_bytes
+from services.pronunciation import analyze_sentence
+from services.text import split_english_sentences
+
+from .models import (
+    AudioAsset,
+    DiaryEntry,
+    EnglishVersion,
+    Recording,
+    Sentence,
+    TtsRender,
+    UsageCounter,
+    WordToken,
+    text_hash,
+)
+
+
+class TranslationQuotaExceeded(Exception):
+    """The user has reached the configured daily translation request limit."""
+
+
+class TTSQuotaExceeded(Exception):
+    """The user has reached the configured daily TTS character limit."""
+
+
+def consume_translation_quota(user, char_count: int) -> None:
+    """Reserve one translation request before making an external paid call."""
+    limit = settings.TRANSLATION_DAILY_REQUEST_LIMIT
+    today = timezone.localdate()
+    with transaction.atomic():
+        counter, _ = UsageCounter.objects.select_for_update().get_or_create(
+            user=user,
+            date=today,
+            feature="translation",
+        )
+        if counter.request_count >= limit:
+            raise TranslationQuotaExceeded(
+                f"今天最多翻译 {limit} 次，请明天再试。"
+            )
+        counter.request_count += 1
+        counter.char_count += max(0, char_count)
+        counter.save(update_fields=["request_count", "char_count"])
+
+
+def consume_tts_quota(user, char_count: int) -> None:
+    """Reserve TTS characters before generating a paid or mock audio file."""
+    limit = settings.TTS_DAILY_CHAR_LIMIT
+    today = timezone.localdate()
+    requested = max(0, char_count)
+    with transaction.atomic():
+        counter, _ = UsageCounter.objects.select_for_update().get_or_create(
+            user=user,
+            date=today,
+            feature="tts",
+        )
+        if counter.char_count + requested > limit:
+            raise TTSQuotaExceeded(f"今天示范朗读字符额度为 {limit}，请明天再试。")
+        counter.request_count += 1
+        counter.char_count += requested
+        counter.save(update_fields=["request_count", "char_count"])
+
+
+def create_recording(
+    *,
+    owner,
+    sentence: Sentence,
+    data: bytes,
+    duration_ms: int,
+) -> Recording:
+    """Store a validated WAV recording and its private audio row atomically."""
+    relative_path, digest, byte_size = write_private_bytes(
+        owner_id=owner.pk,
+        purpose="recordings",
+        data=data,
+        extension="wav",
+    )
+    try:
+        with transaction.atomic():
+            asset = AudioAsset.objects.create(
+                owner=owner,
+                sentence=sentence,
+                purpose=AudioAsset.Purpose.RECORDING,
+                relative_path=relative_path,
+                content_type="audio/wav",
+                byte_size=byte_size,
+                duration_ms=duration_ms,
+                sha256=digest,
+            )
+            return Recording.objects.create(
+                owner=owner,
+                sentence=sentence,
+                audio=asset,
+                target_text=sentence.text,
+                duration_ms=duration_ms,
+            )
+    except Exception:
+        remove_private_bytes(relative_path)
+        raise
+
+
+def create_tts_render(
+    *,
+    owner,
+    sentence: Sentence,
+    result,
+    speed: str,
+    style: str,
+    cache_key: str,
+) -> TtsRender:
+    """Store generated TTS audio privately, rolling back the file on DB failure."""
+    relative_path, digest, byte_size = write_private_bytes(
+        owner_id=owner.pk,
+        purpose="tts",
+        data=result.data,
+        extension=result.extension,
+    )
+    try:
+        with transaction.atomic():
+            asset = AudioAsset.objects.create(
+                owner=owner,
+                sentence=sentence,
+                purpose=AudioAsset.Purpose.TTS,
+                relative_path=relative_path,
+                content_type=result.content_type,
+                byte_size=byte_size,
+                duration_ms=result.duration_ms,
+                sha256=digest,
+            )
+            return TtsRender.objects.create(
+                owner=owner,
+                sentence=sentence,
+                audio=asset,
+                speed=speed,
+                style=style,
+                voice=result.voice,
+                provider=result.provider,
+                model=result.model,
+                cache_key=cache_key,
+                char_count=len(sentence.text),
+            )
+    except Exception:
+        remove_private_bytes(relative_path)
+        raise
+
+
+def create_english_version(
+    diary: DiaryEntry,
+    english_text: str,
+    *,
+    source: str,
+    provider_model: str = "",
+) -> EnglishVersion:
+    """Create an immutable English version and its sentences/IPA tokens."""
+    if source not in EnglishVersion.Source.values:
+        raise ValueError("Unknown English version source")
+    sentences = split_english_sentences(english_text)
+    if not sentences:
+        raise ValidationError("英文内容为空，无法建立练习句子。")
+
+    with transaction.atomic():
+        locked_diary = DiaryEntry.objects.select_for_update().get(pk=diary.pk)
+        latest_no = (
+            locked_diary.english_versions.aggregate(max_no=Max("version_no"))["max_no"]
+            or 0
+        )
+        version = EnglishVersion.objects.create(
+            diary=locked_diary,
+            version_no=latest_no + 1,
+            english_text="\n".join(sentences),
+            source=source,
+            provider_model=provider_model[:100],
+            source_chinese_hash=text_hash(locked_diary.chinese_text),
+        )
+        for sentence_index, sentence_text in enumerate(sentences):
+            sentence = Sentence.objects.create(
+                version=version,
+                ordinal=sentence_index,
+                text=sentence_text,
+            )
+            tokens = analyze_sentence(sentence_text)
+            WordToken.objects.bulk_create(
+                [
+                    WordToken(
+                        sentence=sentence,
+                        ordinal=token_index,
+                        surface=token.surface,
+                        ipa=token.ipa,
+                        source=token.source,
+                    )
+                    for token_index, token in enumerate(tokens)
+                ]
+            )
+        DiaryEntry.objects.filter(pk=locked_diary.pk).update(updated_at=timezone.now())
+    return version

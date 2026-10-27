@@ -1,0 +1,53 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}家庭英语日记{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="{% url 'home' %}">家庭英语日记</a>
+      {% if user.is_authenticated %}
+        <nav class="site-nav" aria-label="主导航">
+          <a href="{% url 'home' %}">首页</a>
+          <a href="{% url 'diary_list' %}">我的日记</a>
+          {% if user.is_owner %}
+            <a href="{% url 'create_invitation' %}">邀请家人</a>
+            <a href="{% url 'members' %}">成员</a>
+          {% endif %}
+          <a href="{% url 'account_settings' %}">账号</a>
+          <span class="nav-name">{{ user.display_name }}</span>
+          <form class="inline-form" method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="link-button" type="submit">退出</button>
+          </form>
+        </nav>
+      {% endif %}
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    {% if messages %}
+      <ul class="messages" aria-live="polite">
+        {% for message in messages %}
+          <li class="message {{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer wrap">
+    <p>仅家庭内部使用 · 不做自动发音评分 · 录音只用于本人回放</p>
+  </footer>
+  <script src="{% static 'js/recorder.js' %}" defer></script>
+</body>
+</html>

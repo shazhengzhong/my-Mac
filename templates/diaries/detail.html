@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ diary.display_title }} · 家庭英语日记{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">{{ diary.entry_date|date:"Y年n月j日" }}</p>
+      <h1>{{ diary.display_title }}</h1>
+    </div>
+    <div class="actions">
+      <a class="button secondary" href="{% url 'diary_edit' diary.id %}">编辑中文</a>
+      <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">编辑英文</a>
+      <a class="link danger-link" href="{% url 'diary_delete' diary.id %}">删除</a>
+    </div>
+  </div>
+
+  <section class="card">
+    <h2>中文日记</h2>
+    <div class="diary-text">{{ diary.chinese_text|linebreaksbr }}</div>
+  </section>
+
+  <section class="card">
+    <div class="heading-row">
+      <div>
+        <h2>英文与音标</h2>
+        {% if current %}
+          <p class="muted">第 {{ current.version_no }} 版 · {{ current.get_source_display }}{% if current.provider_model %} · {{ current.provider_model }}{% endif %}</p>
+        {% endif %}
+      </div>
+      {% if current %}
+        <span class="badge">{{ current.get_source_display }}</span>
+      {% endif %}
+    </div>
+
+    {% if current %}
+      {% if current.is_stale %}
+        <div class="notice warning">
+          中文日记在生成这版英文后又修改过。请重新翻译，或手动编辑英文后再练习。
+        </div>
+      {% endif %}
+
+      {% if translation.is_mock %}
+        <div class="notice">
+          当前为<strong>模拟翻译模式</strong>：英文是固定的测试内容，不会调用 DeepSeek，也不会产生费用。
+        </div>
+      {% elif not translation.ready %}
+        <div class="notice warning">{{ translation.message }}</div>
+      {% endif %}
+
+      <div class="actions">
+        {% if translation.ready %}
+          <form method="post" action="{% url 'diary_translate' diary.id %}">
+            {% csrf_token %}
+            <button class="button secondary" type="submit">重新翻译</button>
+          </form>
+        {% endif %}
+        <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">手动修改英文</a>
+      </div>
+
+      {% if tts.is_mock %}
+        <div class="notice">
+          当前<strong>示范朗读是模拟提示音</strong>，不是真人语音，也不会产生费用。真实情感人声需要后续接入。
+        </div>
+      {% elif not tts.ready %}
+        <div class="notice warning">{{ tts.message }}</div>
+      {% endif %}
+
+      <ol class="sentence-list">
+        {% for sentence in sentences %}
+          <li class="sentence-card" id="sentence-{{ sentence.id }}">
+            <div class="sentence-header">
+              <span class="sentence-number">第 {{ forloop.counter }} 句</span>
+              <a class="small-link" href="{% url 'edit_sentence_ipa' sentence.id %}">校对音标</a>
+            </div>
+            <p class="english-sentence" lang="en">{{ sentence.text }}</p>
+            <div class="word-grid" aria-label="第 {{ forloop.counter }} 句的单词和美式音标">
+              {% for token in sentence.tokens.all %}
+                <span class="word-chip">
+                  <span class="word-surface" lang="en">{{ token.surface }}</span>
+                  {% if token.ipa %}
+                    <span class="ipa">/{{ token.ipa }}/</span>
+                  {% else %}
+                    <span class="ipa unknown">未收录</span>
+                  {% endif %}
+                </span>
+              {% empty %}
+                <span class="muted">这一句没有可显示的英文单词。</span>
+              {% endfor %}
+            </div>
+
+            <div class="practice-tools">
+              <div class="practice-block">
+                <h3 class="tool-title">示范朗读</h3>
+                <div class="audio-row">
+                  {% if sentence.tts_normal %}
+                    <div class="audio-pair">
+                      <span class="audio-label">正常</span>
+                      <audio controls preload="none" src="{% url 'serve_audio_asset' sentence.tts_normal.audio_id %}"></audio>
+                    </div>
+                  {% elif tts.ready %}
+                    <form method="post" action="{% url 'sentence_tts' sentence.id 'normal' %}">
+                      {% csrf_token %}
+                      <button class="button secondary" type="submit">生成正常示范</button>
+                    </form>
+                  {% endif %}
+
+                  {% if sentence.tts_slow %}
+                    <div class="audio-pair">
+                      <span class="audio-label">慢速</span>
+                      <audio controls preload="none" src="{% url 'serve_audio_asset' sentence.tts_slow.audio_id %}"></audio>
+                    </div>
+                  {% elif tts.ready %}
+                    <form method="post" action="{% url 'sentence_tts' sentence.id 'slow' %}">
+                      {% csrf_token %}
+                      <button class="button secondary" type="submit">生成慢速示范</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div
+                class="practice-block record-control"
+                data-record-control
+                data-upload-url="{% url 'upload_recording' sentence.id %}"
+              >
+                <h3 class="tool-title">我的录音</h3>
+                <div class="record-actions">
+                  <button class="button secondary js-record-button" type="button">开始录音</button>
+                  <span class="record-status" role="status" aria-live="polite">尚未录音</span>
+                </div>
+                <p class="muted small">点击后允许麦克风，最长 60 秒。录音只有你自己可以访问。</p>
+                {% if sentence.recordings.all %}
+                  <div class="recording-list">
+                    {% for recording in sentence.recordings.all %}
+                      <div class="recording-item">
+                        <span class="muted small">{{ recording.created_at|date:"m-d H:i" }}</span>
+                        <audio controls preload="none" src="{% url 'serve_audio_asset' recording.audio_id %}"></audio>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <p class="muted small">还没有录音。</p>
+                {% endif %}
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+
+      <p class="muted small">
+        音标是单词级美式 IPA（宽式标准音），不代表真人语流中的全部连读或弱读。词典未收录的名字可以点“校对音标”手动填写。
+      </p>
+      {% if previous_count %}
+        <p class="muted small">另外保留了 {{ previous_count }} 个旧英文版本；当前页面显示最新版本。</p>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">
+        <p>这篇日记还没有英文。生成后可以逐句查看音标并练习。</p>
+        {% if translation.is_mock %}
+          <div class="notice">
+            当前为<strong>模拟翻译模式</strong>：会显示固定测试英文，不会调用 DeepSeek，也不会产生费用。
+          </div>
+        {% elif not translation.ready %}
+          <div class="notice warning">{{ translation.message }}</div>
+        {% endif %}
+        <div class="actions">
+          {% if translation.ready %}
+            <form method="post" action="{% url 'diary_translate' diary.id %}">
+              {% csrf_token %}
+              <button class="button" type="submit">生成英文翻译</button>
+            </form>
+          {% endif %}
+          <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">手动填写英文</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}
