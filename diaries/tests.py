@@ -30,11 +30,12 @@ from services.audio import (
     validate_recording_wav,
 )
 from services.pronunciation import analyze_sentence, clean_manual_ipa, ipa_for_word
-from services.text import split_english_sentences
+from services.text import split_chinese_sentences, split_english_sentences
 from services.translation import (
     DeepSeekTranslator,
     MockTranslator,
     TranslationError,
+    TranslationPair,
     get_translator,
 )
 from services.tts import (
@@ -55,7 +56,7 @@ from .models import (
     UsageCounter,
     WordToken,
 )
-from .services import create_english_version
+from .services import create_aligned_english_version, create_english_version
 
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 PASSWORD = "Brisk-Cobalt-Orbit-42"
@@ -125,6 +126,26 @@ class TextServiceTests(TestCase):
     def test_empty_text(self):
         self.assertEqual(split_english_sentences(" \n "), [])
 
+    def test_split_chinese_sentences_keeps_punctuation_and_ellipsis(self):
+        text = "今天天气很好。我和家人去公园散步。\n晚上看电视！他说……后来呢？"
+        self.assertEqual(
+            split_chinese_sentences(text),
+            [
+                "今天天气很好。",
+                "我和家人去公园散步。",
+                "晚上看电视！",
+                "他说……",
+                "后来呢？",
+            ],
+        )
+
+    def test_split_chinese_sentences_does_not_split_decimal_points(self):
+        self.assertEqual(
+            split_chinese_sentences("版本 1.5 很好。第二句。"),
+            ["版本 1.5 很好。", "第二句。"],
+        )
+        self.assertEqual(split_chinese_sentences(" \n "), [])
+
 
 class TranslationServiceTests(TestCase):
     def test_mock_translator_does_not_use_network(self):
@@ -188,6 +209,87 @@ class TranslationServiceTests(TestCase):
     def test_missing_key_is_rejected_without_network(self):
         with self.assertRaises(TranslationError):
             get_translator()
+
+    def test_mock_translator_returns_pairs_offline(self):
+        pairs = MockTranslator().translate_pairs("今天很好。")
+        self.assertEqual(len(pairs), 3)
+        self.assertTrue(all(pair.chinese and pair.english for pair in pairs))
+
+    def test_deepseek_pair_request_shape_and_response(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "translations": [
+                                            "Hello there.",
+                                            "How are you?",
+                                        ]
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        translator = DeepSeekTranslator(
+            api_key="test-key",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            client=client,
+        )
+        pairs = translator.translate_pairs("你好。你好吗？")
+
+        self.assertEqual([pair.chinese for pair in pairs], ["你好。", "你好吗？"])
+        self.assertEqual(
+            [pair.english for pair in pairs],
+            ["Hello there.", "How are you?"],
+        )
+        self.assertIn(
+            "translations", captured["payload"]["messages"][0]["content"]
+        )
+        self.assertEqual(
+            json.loads(captured["payload"]["messages"][1]["content"]),
+            ["你好。", "你好吗？"],
+        )
+
+    def test_deepseek_pair_count_mismatch_raises(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {"translations": ["Only one."]}
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        translator = DeepSeekTranslator(
+            api_key="test-key",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            client=client,
+        )
+        with self.assertRaises(TranslationError):
+            translator.translate_pairs("你好。你好吗？")
 
 
 class DiaryFixtureMixin:
@@ -347,6 +449,60 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
         detail = self.client.get(reverse("diary_detail", args=[diary.id]))
         self.assertContains(detail, "模拟翻译模式")
         self.assertContains(detail, "ˈ")
+
+    def test_mock_translation_creates_chinese_alignment(self):
+        diary = make_diary(self.owner)
+        self.client.post(reverse("diary_translate", args=[diary.id]))
+
+        version = diary.current_version
+        sentences = list(version.sentences.order_by("ordinal"))
+        self.assertTrue(all(sentence.chinese_text for sentence in sentences))
+        self.assertEqual(
+            [sentence.chinese_ordinal for sentence in sentences],
+            [0, 1, 2],
+        )
+
+        detail = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(detail, "data-chinese-toggle")
+        self.assertContains(detail, "sentence-zh")
+        self.assertContains(detail, "practice-zh")
+        self.assertContains(detail, "今天我写了一篇中文日记。")
+
+    def test_aligned_version_stores_grouped_sentences(self):
+        diary = make_diary(self.owner)
+        pairs = [
+            TranslationPair("今天很好。", "It was a nice day. I went out."),
+            TranslationPair("明天见。", "See you tomorrow."),
+        ]
+        version = create_aligned_english_version(
+            diary,
+            pairs,
+            source="deepseek",
+            provider_model="deepseek-chat",
+        )
+
+        sentences = list(version.sentences.order_by("ordinal"))
+        self.assertEqual(
+            [sentence.text for sentence in sentences],
+            ["It was a nice day.", "I went out.", "See you tomorrow."],
+        )
+        self.assertEqual(
+            [sentence.chinese_text for sentence in sentences],
+            ["今天很好。", "今天很好。", "明天见。"],
+        )
+        self.assertEqual(
+            [sentence.chinese_ordinal for sentence in sentences],
+            [0, 0, 1],
+        )
+
+    def test_manual_english_version_shows_alignment_notice(self):
+        diary = make_diary(self.owner)
+        self.client.post(
+            reverse("diary_edit_english", args=[diary.id]),
+            {"english_text": "Hello world."},
+        )
+        detail = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(detail, "没有中英文句子对照")
 
     def test_retranslate_creates_new_version_and_preserves_old(self):
         diary = make_diary(self.owner)

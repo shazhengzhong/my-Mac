@@ -8,13 +8,14 @@
       <h1>{{ diary.display_title }}</h1>
     </div>
     <div class="actions">
+      <button class="button secondary" type="button" data-chinese-toggle aria-pressed="false">隐藏中文</button>
       <a class="button secondary" href="{% url 'diary_edit' diary.id %}">编辑中文</a>
       <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">编辑英文</a>
       <a class="link danger-link" href="{% url 'diary_delete' diary.id %}">删除</a>
     </div>
   </div>
 
-  <section class="card">
+  <section class="card zh-only">
     <h2>中文日记</h2>
     <div class="diary-text">{{ diary.chinese_text|linebreaksbr }}</div>
   </section>
@@ -45,6 +46,12 @@
         </div>
       {% elif not translation.ready %}
         <div class="notice warning">{{ translation.message }}</div>
+      {% endif %}
+
+      {% if not has_aligned_chinese %}
+        <div class="notice">
+          当前版本没有中英文句子对照。点“重新翻译”可生成对照；旧版本会保留。
+        </div>
       {% endif %}
 
       <div class="actions">
@@ -84,6 +91,9 @@
               <span class="sentence-number">第 {{ forloop.counter }} 句</span>
               <a class="small-link" href="{% url 'edit_sentence_ipa' sentence.id %}">校对音标</a>
             </div>
+            {% if sentence.show_chinese %}
+              <p class="sentence-zh zh-only">{{ sentence.chinese_text }}</p>
+            {% endif %}
             <p class="english-sentence" lang="en">{{ sentence.text }}</p>
             <div class="word-grid" aria-label="第 {{ forloop.counter }} 句的单词和美式音标">
               {% for token in sentence.tokens.all %}
@@ -114,6 +124,9 @@
               {% endfor %}
             </div>
 
+            {% if sentence.chinese_text %}
+              <p class="practice-zh zh-only">{{ sentence.chinese_text }}</p>
+            {% endif %}
             <div class="practice-tools">
               <div class="practice-block">
                 <h3 class="tool-title">示范朗读</h3>
@@ -204,4 +217,5 @@
 {% endblock %}
 {% block scripts %}
   <script src="{% static 'js/word-assessor.js' %}" defer></script>
+  <script src="{% static 'js/chinese-toggle.js' %}" defer></script>
 {% endblock %}

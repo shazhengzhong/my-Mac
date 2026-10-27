@@ -9,6 +9,7 @@ from django.utils import timezone
 from services.audio import remove_private_bytes, write_private_bytes
 from services.pronunciation import analyze_sentence
 from services.text import split_english_sentences
+from services.translation import TranslationPair
 
 from .models import (
     AudioAsset,
@@ -221,18 +222,17 @@ def create_tts_render(
         raise
 
 
-def create_english_version(
+def _create_version_with_sentences(
     diary: DiaryEntry,
-    english_text: str,
+    specs: list[tuple[str, str, int | None]],
     *,
     source: str,
     provider_model: str = "",
 ) -> EnglishVersion:
-    """Create an immutable English version and its sentences/IPA tokens."""
+    """Create an immutable version from (english, chinese, chinese_ordinal) rows."""
     if source not in EnglishVersion.Source.values:
         raise ValueError("Unknown English version source")
-    sentences = split_english_sentences(english_text)
-    if not sentences:
+    if not specs:
         raise ValidationError("英文内容为空，无法建立练习句子。")
 
     with transaction.atomic():
@@ -244,16 +244,20 @@ def create_english_version(
         version = EnglishVersion.objects.create(
             diary=locked_diary,
             version_no=latest_no + 1,
-            english_text="\n".join(sentences),
+            english_text="\n".join(english for english, _, _ in specs),
             source=source,
             provider_model=provider_model[:100],
             source_chinese_hash=text_hash(locked_diary.chinese_text),
         )
-        for sentence_index, sentence_text in enumerate(sentences):
+        for sentence_index, (sentence_text, chinese_text, chinese_ordinal) in enumerate(
+            specs
+        ):
             sentence = Sentence.objects.create(
                 version=version,
                 ordinal=sentence_index,
                 text=sentence_text,
+                chinese_text=chinese_text,
+                chinese_ordinal=chinese_ordinal,
             )
             tokens = analyze_sentence(sentence_text)
             WordToken.objects.bulk_create(
@@ -270,3 +274,53 @@ def create_english_version(
             )
         DiaryEntry.objects.filter(pk=locked_diary.pk).update(updated_at=timezone.now())
     return version
+
+
+def create_english_version(
+    diary: DiaryEntry,
+    english_text: str,
+    *,
+    source: str,
+    provider_model: str = "",
+) -> EnglishVersion:
+    """Create an immutable English version without Chinese sentence alignment."""
+    sentences = split_english_sentences(english_text)
+    if not sentences:
+        raise ValidationError("英文内容为空，无法建立练习句子。")
+    return _create_version_with_sentences(
+        diary,
+        [(sentence, "", None) for sentence in sentences],
+        source=source,
+        provider_model=provider_model,
+    )
+
+
+def create_aligned_english_version(
+    diary: DiaryEntry,
+    pairs: list[TranslationPair],
+    *,
+    source: str,
+    provider_model: str = "",
+) -> EnglishVersion:
+    """Create a version whose English sentences keep their Chinese source group."""
+    if not pairs:
+        raise ValidationError("翻译结果为空，无法建立练习句子。")
+
+    specs: list[tuple[str, str, int | None]] = []
+    for chinese_ordinal, pair in enumerate(pairs):
+        chinese = (pair.chinese or "").strip()
+        english = (pair.english or "").strip()
+        if not chinese or not english:
+            raise ValidationError("翻译结果包含空句子，无法建立练习句子。")
+        english_sentences = split_english_sentences(english)
+        if not english_sentences:
+            raise ValidationError("英文内容为空，无法建立练习句子。")
+        for sentence in english_sentences:
+            specs.append((sentence, chinese, chinese_ordinal))
+
+    return _create_version_with_sentences(
+        diary,
+        specs,
+        source=source,
+        provider_model=provider_model,
+    )

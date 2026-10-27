@@ -41,6 +41,7 @@ from .services import (
     consume_assessment_quota,
     consume_translation_quota,
     consume_tts_quota,
+    create_aligned_english_version,
     create_english_version,
     create_pronunciation_attempt,
     create_recording,
@@ -247,11 +248,23 @@ def diary_detail(request, diary_id):
         )
         for attempt in attempts:
             assessment_map.setdefault(attempt.word_token_id, attempt)
+    previous_chinese_ordinal = None
+    has_aligned_chinese = False
     for sentence in sentences:
         sentence.tts_normal = tts_map.get((sentence.id, TtsRender.Speed.NORMAL))
         sentence.tts_slow = tts_map.get((sentence.id, TtsRender.Speed.SLOW))
         for token in sentence.tokens.all():
             token.latest_assessment = assessment_map.get(token.id)
+        if sentence.chinese_text:
+            has_aligned_chinese = True
+        sentence.show_chinese = (
+            bool(sentence.chinese_text)
+            and sentence.chinese_ordinal != previous_chinese_ordinal
+        )
+        if sentence.chinese_ordinal is not None:
+            previous_chinese_ordinal = sentence.chinese_ordinal
+        else:
+            previous_chinese_ordinal = None
 
     return render(
         request,
@@ -261,6 +274,7 @@ def diary_detail(request, diary_id):
             "current": current,
             "sentences": sentences,
             "previous_count": previous_count,
+            "has_aligned_chinese": has_aligned_chinese,
             "translation": _translation_status(),
             "tts": _tts_status(),
             "assessment": _assessment_status(),
@@ -281,10 +295,10 @@ def diary_translate(request, diary_id):
 
     try:
         consume_translation_quota(request.user, len(diary.chinese_text))
-        english_text = translator.translate(diary.chinese_text)
-        version = create_english_version(
+        pairs = translator.translate_pairs(diary.chinese_text)
+        version = create_aligned_english_version(
             diary,
-            english_text,
+            pairs,
             source=translator.source,
             provider_model=translator.model,
         )

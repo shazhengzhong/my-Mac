@@ -89,6 +89,8 @@ class Sentence(models.Model):
     )
     ordinal = models.PositiveIntegerField()
     text = models.TextField()
+    chinese_text = models.TextField(blank=True, default="")
+    chinese_ordinal = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ["ordinal"]
