@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 import re
 
+import pyphen
 from syllabify import syllabify
+
+_PYPHEN = pyphen.Pyphen(lang="en_US")
 
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)*")
 MAX_IPA_LENGTH = 120
@@ -105,6 +108,23 @@ def ipa_for_word(normalized_word: str) -> str | None:
 
     result = "".join(syllables_out).strip()
     return result or None
+
+
+@lru_cache(maxsize=100_000)
+def syllable_hint(word: str) -> str:
+    """Return a written syllable split such as ``com·fort·able``.
+
+    One-syllable words and words the dictionary cannot split return an empty
+    string so the UI does not repeat the whole word.
+    """
+    cleaned = (word or "").strip()
+    if not cleaned or len(cleaned) < 4:
+        return ""
+    try:
+        hinted = _PYPHEN.inserted(cleaned, "·")
+    except (ValueError, KeyError):
+        return ""
+    return hinted if "·" in hinted else ""
 
 
 def tokenize_words(text: str) -> list[str]:

@@ -29,7 +29,12 @@ from services.audio import (
     parse_byte_range,
     validate_recording_wav,
 )
-from services.pronunciation import analyze_sentence, clean_manual_ipa, ipa_for_word
+from services.pronunciation import (
+    analyze_sentence,
+    clean_manual_ipa,
+    ipa_for_word,
+    syllable_hint,
+)
 from services.text import split_chinese_sentences, split_english_sentences
 from services.translation import (
     DeepSeekTranslator,
@@ -101,6 +106,12 @@ class PronunciationServiceTests(TestCase):
         self.assertTrue(tokens[0].ipa)
         self.assertEqual(tokens[-1].source, "unknown")
         self.assertEqual(tokens[-1].ipa, "")
+
+    def test_syllable_hint_splits_written_words(self):
+        self.assertIn("·", syllable_hint("comfortable"))
+        self.assertIn("·", syllable_hint("water"))
+        self.assertEqual(syllable_hint("and"), "")
+        self.assertEqual(syllable_hint("the"), "")
 
     def test_manual_ipa_cleaning(self):
         self.assertEqual(clean_manual_ipa(" /ˈwɔtər/ "), "ˈwɔtər")
@@ -868,6 +879,11 @@ class WordTTSFlowTests(AudioTestBase):
     def _token(self):
         _, sentence = self.make_sentence()
         return sentence.tokens.get(surface="water")
+
+    def test_word_chips_show_syllable_hint(self):
+        diary, sentence = self.make_sentence()
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "wa·ter")
 
     def test_word_tts_generates_private_audio_and_cache(self):
         token = self._token()

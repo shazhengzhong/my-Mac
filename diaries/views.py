@@ -22,6 +22,7 @@ from services.audio import (
     validate_assessment_wav,
     validate_recording_wav,
 )
+from services.pronunciation import syllable_hint
 from services.translation import TranslationError, get_translator
 from services.tts import TTSError, get_tts_provider, tts_cache_key
 
@@ -259,6 +260,7 @@ def diary_detail(request, diary_id):
         sentence.tts_slow = tts_map.get((sentence.id, TtsRender.Speed.SLOW))
         for token in sentence.tokens.all():
             token.latest_assessment = assessment_map.get(token.id)
+            token.syllable_hint = syllable_hint(token.surface)
         if sentence.chinese_text:
             has_aligned_chinese = True
         sentence.show_chinese = (

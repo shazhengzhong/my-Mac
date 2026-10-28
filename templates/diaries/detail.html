@@ -142,6 +142,9 @@
                   {% else %}
                     <span class="ipa unknown">未收录</span>
                   {% endif %}
+                  {% if token.syllable_hint %}
+                    <span class="syllable-hint">{{ token.syllable_hint }}</span>
+                  {% endif %}
                   {% if tts.ready %}
                     <span class="word-play-status" role="status" aria-live="polite"></span>
                   {% endif %}
