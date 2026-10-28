@@ -24,7 +24,7 @@ from services.audio import (
 )
 from services.pronunciation import syllable_hint
 from services.translation import TranslationError, get_translator
-from services.tts import TTSError, get_tts_provider, tts_cache_key
+from services.tts import TTSError, get_tts_provider, tts_cache_key, word_tts_context
 
 from .forms import DiaryForm, EnglishVersionForm, IpaCorrectionForm
 from .models import (
@@ -474,6 +474,7 @@ def word_tts(request, token_id):
 
     style = "natural"
     speed = "word"
+    context = word_tts_context(token.surface)
     cache_key = tts_cache_key(
         provider=provider.provider,
         model=provider.model,
@@ -482,6 +483,7 @@ def word_tts(request, token_id):
         speed=speed,
         rate=provider.speech_rate(speed),
         text=token.surface,
+        context=context,
     )
     existing = (
         WordTtsRender.objects.filter(owner=request.user, cache_key=cache_key)
@@ -502,7 +504,9 @@ def word_tts(request, token_id):
 
     try:
         consume_tts_quota(request.user, len(token.surface))
-        result = provider.synthesize(token.surface, speed=speed, style=style)
+        result = provider.synthesize(
+            token.surface, speed=speed, style=style, context_text=context
+        )
         render = create_word_tts_render(
             owner=request.user,
             sentence=token.sentence,

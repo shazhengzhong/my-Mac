@@ -46,7 +46,9 @@ class TTSProvider(Protocol):
 
     def speech_rate(self, speed: str) -> int: ...
 
-    def synthesize(self, text: str, *, speed: str, style: str) -> TTSResult: ...
+    def synthesize(
+        self, text: str, *, speed: str, style: str, context_text: str = ""
+    ) -> TTSResult: ...
 
 
 class MockTTSProvider:
@@ -59,7 +61,9 @@ class MockTTSProvider:
     def speech_rate(self, speed: str) -> int:
         return 0
 
-    def synthesize(self, text: str, *, speed: str, style: str) -> TTSResult:
+    def synthesize(
+        self, text: str, *, speed: str, style: str, context_text: str = ""
+    ) -> TTSResult:
         duration = min(4.0, max(0.8, len(text or "") * 0.025))
         if speed == "slow":
             duration = min(5.0, duration * 1.25)
@@ -176,7 +180,9 @@ class VolcengineTTSProvider:
             "X-Api-Access-Key": self.access_token,
         }
 
-    def _request_payload(self, text: str, *, speed: str, style: str) -> dict:
+    def _request_payload(
+        self, text: str, *, speed: str, style: str, context_text: str = ""
+    ) -> dict:
         audio_params = {
             "format": "pcm",
             "sample_rate": self.sample_rate,
@@ -191,7 +197,7 @@ class VolcengineTTSProvider:
         }.get(style)
         if emotion is not None:
             audio_params["emotion"] = emotion
-        return {
+        payload = {
             "user": {"uid": "family-english-diary"},
             "req_params": {
                 "text": text,
@@ -199,6 +205,15 @@ class VolcengineTTSProvider:
                 "audio_params": audio_params,
             },
         }
+        if context_text:
+            payload["req_params"]["additions"] = json.dumps(
+                {
+                    "explicit_language": "en",
+                    "context_text": context_text,
+                    "context_language": "en",
+                }
+            )
+        return payload
 
     def _request_headers(self, request_id: str) -> dict[str, str]:
         return {
@@ -258,10 +273,18 @@ class VolcengineTTSProvider:
         return buffer.getvalue()
 
     def _request(
-        self, client: httpx.Client, text: str, *, speed: str, style: str
+        self,
+        client: httpx.Client,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        context_text: str = "",
     ) -> TTSResult:
         request_id = str(uuid.uuid4())
-        payload = self._request_payload(text, speed=speed, style=style)
+        payload = self._request_payload(
+            text, speed=speed, style=style, context_text=context_text
+        )
         headers = self._request_headers(request_id)
         chunks: list[bytes] = []
 
@@ -326,14 +349,40 @@ class VolcengineTTSProvider:
             style=style,
         )
 
-    def synthesize(self, text: str, *, speed: str, style: str) -> TTSResult:
+    def synthesize(
+        self, text: str, *, speed: str, style: str, context_text: str = ""
+    ) -> TTSResult:
         if self._client is not None:
-            return self._request(self._client, text, speed=speed, style=style)
+            return self._request(
+                self._client,
+                text,
+                speed=speed,
+                style=style,
+                context_text=context_text,
+            )
         try:
             with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-                return self._request(client, text, speed=speed, style=style)
+                return self._request(
+                    client,
+                    text,
+                    speed=speed,
+                    style=style,
+                    context_text=context_text,
+                )
         except httpx.HTTPError as exc:
             raise TTSError("暂时无法连接语音服务，请检查网络后再试。") from exc
+
+
+WORD_TTS_CONTEXTS = {
+    "i'm": "I'm going home now.",
+    "they": "They are my friends.",
+}
+
+
+def word_tts_context(word: str) -> str:
+    """Return a carrier sentence for words the isolated-word voice misreads."""
+    normalized = (word or "").strip().lower().replace("’", "'")
+    return WORD_TTS_CONTEXTS.get(normalized, "")
 
 
 def tts_cache_key(
@@ -345,8 +394,12 @@ def tts_cache_key(
     speed: str,
     rate: int,
     text: str,
+    context: str = "",
 ) -> str:
-    material = "\x1f".join([provider, model, voice, style, speed, str(rate), text])
+    parts = [provider, model, voice, style, speed, str(rate), text]
+    if context:
+        parts.append(context)
+    material = "\x1f".join(parts)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 

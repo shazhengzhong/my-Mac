@@ -48,6 +48,8 @@ from services.tts import (
     TTSError,
     VolcengineTTSProvider,
     get_tts_provider,
+    tts_cache_key,
+    word_tts_context,
 )
 
 from .models import (
@@ -880,6 +882,14 @@ class WordTTSFlowTests(AudioTestBase):
         _, sentence = self.make_sentence()
         return sentence.tokens.get(surface="water")
 
+    def test_word_tts_context_word_creates_render(self):
+        diary, sentence = self.make_sentence(text="I'm happy. They are here.")
+        token = sentence.tokens.get(surface="I'm")
+        response = self.client.post(reverse("word_tts", args=[token.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+        self.assertTrue(WordTtsRender.objects.filter(target_word="I'm").exists())
+
     def test_word_chips_show_syllable_hint(self):
         diary, sentence = self.make_sentence()
         response = self.client.get(reverse("diary_detail", args=[diary.id]))
@@ -1073,6 +1083,55 @@ class VolcengineTTSServiceTests(TestCase):
 
         audio = captured["payload"]["req_params"]["audio_params"]
         self.assertEqual(audio["speech_rate"], -20)
+
+    def test_word_tts_context_mapping(self):
+        self.assertEqual(word_tts_context("I'm"), "I'm going home now.")
+        self.assertEqual(word_tts_context("I’m"), "I'm going home now.")
+        self.assertEqual(word_tts_context("they"), "They are my friends.")
+        self.assertEqual(word_tts_context("water"), "")
+
+    def test_word_context_is_sent_as_additions(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=self._sse_body(self.PCM),
+            )
+
+        provider = self._provider(handler)
+        provider.synthesize(
+            "I'm",
+            speed="word",
+            style="natural",
+            context_text="I'm going home now.",
+        )
+
+        additions = json.loads(captured["payload"]["req_params"]["additions"])
+        self.assertEqual(additions["explicit_language"], "en")
+        self.assertEqual(additions["context_text"], "I'm going home now.")
+        self.assertEqual(additions["context_language"], "en")
+
+    def test_word_cache_key_includes_context(self):
+        base = {
+            "provider": "volcengine",
+            "model": "seed-tts-2.0",
+            "voice": "voice",
+            "style": "natural",
+            "speed": "word",
+            "rate": -20,
+            "text": "they",
+        }
+        self.assertNotEqual(
+            tts_cache_key(**base),
+            tts_cache_key(**base, context="They are my friends."),
+        )
+        self.assertNotEqual(
+            tts_cache_key(**base, context="They are my friends."),
+            tts_cache_key(**base, context="They are my friends!"),
+        )
 
     def test_word_speed_uses_word_rate(self):
         captured = {}
