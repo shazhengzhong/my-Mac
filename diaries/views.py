@@ -30,6 +30,7 @@ from .forms import DiaryForm, EnglishVersionForm, IpaCorrectionForm
 from .models import (
     AudioAsset,
     DiaryEntry,
+    DiaryReadAloud,
     PronunciationAttempt,
     Sentence,
     TtsRender,
@@ -44,6 +45,7 @@ from .services import (
     consume_translation_quota,
     consume_tts_quota,
     create_aligned_english_version,
+    create_diary_read_aloud,
     create_english_version,
     create_pronunciation_attempt,
     create_recording,
@@ -261,6 +263,7 @@ def diary_detail(request, diary_id):
         for token in sentence.tokens.all():
             token.latest_assessment = assessment_map.get(token.id)
             token.syllable_hint = syllable_hint(token.surface)
+        sentence.karaoke_words = sentence.text.split()
         if sentence.chinese_text:
             has_aligned_chinese = True
         sentence.show_chinese = (
@@ -330,6 +333,84 @@ def diary_translate(request, diary_id):
     else:
         messages.success(request, f"已生成第 {version.version_no} 版英文。")
     return redirect("diary_detail", diary_id=diary.id)
+
+
+@login_required
+@require_POST
+@never_cache
+def diary_read_aloud(request, diary_id):
+    diary = _owned_diary(request, diary_id)
+    version = diary.current_version
+    if version is None:
+        return JsonResponse({"ok": False, "error": "这篇日记还没有英文。"}, status=400)
+    sentences = list(version.sentences.order_by("ordinal"))
+    if not sentences:
+        return JsonResponse(
+            {"ok": False, "error": "这篇日记还没有英文句子。"},
+            status=400,
+        )
+
+    existing = (
+        DiaryReadAloud.objects.filter(owner=request.user, version=version)
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return JsonResponse(
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset", args=[existing.audio_id]
+                ),
+                "duration_ms": existing.audio.duration_ms,
+                "timings": existing.timings,
+                "cached": True,
+            }
+        )
+
+    try:
+        provider = get_tts_provider()
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
+
+    full_text = "\n".join(sentence.text for sentence in sentences)
+    try:
+        consume_tts_quota(request.user, len(full_text))
+        result = provider.synthesize(
+            full_text,
+            speed="normal",
+            style="natural",
+            enable_subtitles=True,
+        )
+        read_aloud = create_diary_read_aloud(
+            owner=request.user,
+            version=version,
+            sentence=sentences[0],
+            result=result,
+            timings=result.timings,
+            char_count=len(full_text),
+        )
+    except TTSQuotaExceeded as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "全文朗读生成失败，请稍后再试。"},
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "audio_url": reverse(
+                "serve_audio_asset", args=[read_aloud.audio_id]
+            ),
+            "duration_ms": result.duration_ms,
+            "timings": list(result.timings),
+            "cached": False,
+        }
+    )
 
 
 @login_required

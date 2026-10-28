@@ -37,6 +37,7 @@ class TTSResult:
     model: str
     voice: str
     style: str
+    timings: tuple[dict, ...] = ()
 
 
 class TTSProvider(Protocol):
@@ -47,7 +48,13 @@ class TTSProvider(Protocol):
     def speech_rate(self, speed: str) -> int: ...
 
     def synthesize(
-        self, text: str, *, speed: str, style: str, context_text: str = ""
+        self,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        context_text: str = "",
+        enable_subtitles: bool = False,
     ) -> TTSResult: ...
 
 
@@ -62,7 +69,13 @@ class MockTTSProvider:
         return 0
 
     def synthesize(
-        self, text: str, *, speed: str, style: str, context_text: str = ""
+        self,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        context_text: str = "",
+        enable_subtitles: bool = False,
     ) -> TTSResult:
         duration = min(4.0, max(0.8, len(text or "") * 0.025))
         if speed == "slow":
@@ -105,6 +118,23 @@ class MockTTSProvider:
             wav.setframerate(rate)
             wav.writeframes(bytes(frames))
 
+        words = (text or "").split()
+        timings: tuple[dict, ...] = ()
+        if enable_subtitles and words:
+            duration_ms = int(duration * 1000)
+            step = max(1, duration_ms // len(words))
+            timings = tuple(
+                {
+                    "word": word,
+                    "start_ms": index * step,
+                    "end_ms": (
+                        duration_ms
+                        if index == len(words) - 1
+                        else (index + 1) * step
+                    ),
+                }
+                for index, word in enumerate(words)
+            )
         return TTSResult(
             data=buffer.getvalue(),
             content_type="audio/wav",
@@ -114,6 +144,7 @@ class MockTTSProvider:
             model=self.model,
             voice=self.voice,
             style=style,
+            timings=timings,
         )
 
 
@@ -181,7 +212,13 @@ class VolcengineTTSProvider:
         }
 
     def _request_payload(
-        self, text: str, *, speed: str, style: str, context_text: str = ""
+        self,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        context_text: str = "",
+        enable_subtitles: bool = False,
     ) -> dict:
         audio_params = {
             "format": "pcm",
@@ -197,6 +234,8 @@ class VolcengineTTSProvider:
         }.get(style)
         if emotion is not None:
             audio_params["emotion"] = emotion
+        if enable_subtitles:
+            audio_params["enable_subtitle"] = True
         payload = {
             "user": {"uid": "family-english-diary"},
             "req_params": {
@@ -280,13 +319,19 @@ class VolcengineTTSProvider:
         speed: str,
         style: str,
         context_text: str = "",
+        enable_subtitles: bool = False,
     ) -> TTSResult:
         request_id = str(uuid.uuid4())
         payload = self._request_payload(
-            text, speed=speed, style=style, context_text=context_text
+            text,
+            speed=speed,
+            style=style,
+            context_text=context_text,
+            enable_subtitles=enable_subtitles,
         )
         headers = self._request_headers(request_id)
         chunks: list[bytes] = []
+        timings: list[dict] = []
 
         try:
             with client.stream(
@@ -316,8 +361,36 @@ class VolcengineTTSProvider:
                     event = self._parse_event(line)
                     if event is None:
                         continue
+
+                    if enable_subtitles:
+                        sentence = event.get("sentence")
+                        if isinstance(sentence, dict):
+                            for item in sentence.get("words") or []:
+                                if not isinstance(item, dict):
+                                    continue
+                                word = item.get("word")
+                                try:
+                                    start_ms = int(
+                                        round(float(item["startTime"]) * 1000)
+                                    )
+                                    end_ms = int(
+                                        round(float(item["endTime"]) * 1000)
+                                    )
+                                except (KeyError, TypeError, ValueError):
+                                    continue
+                                if isinstance(word, str) and word:
+                                    timings.append(
+                                        {
+                                            "word": word,
+                                            "start_ms": start_ms,
+                                            "end_ms": end_ms,
+                                        }
+                                    )
+
                     code = event.get("code", 0)
                     if code == VOLCENGINE_END_CODE:
+                        if enable_subtitles:
+                            continue
                         break
                     if code != 0:
                         raise TTSError(
@@ -347,10 +420,17 @@ class VolcengineTTSProvider:
             model=self.model,
             voice=self.voice,
             style=style,
+            timings=tuple(timings),
         )
 
     def synthesize(
-        self, text: str, *, speed: str, style: str, context_text: str = ""
+        self,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        context_text: str = "",
+        enable_subtitles: bool = False,
     ) -> TTSResult:
         if self._client is not None:
             return self._request(
@@ -359,6 +439,7 @@ class VolcengineTTSProvider:
                 speed=speed,
                 style=style,
                 context_text=context_text,
+                enable_subtitles=enable_subtitles,
             )
         try:
             with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
@@ -368,6 +449,7 @@ class VolcengineTTSProvider:
                     speed=speed,
                     style=style,
                     context_text=context_text,
+                    enable_subtitles=enable_subtitles,
                 )
         except httpx.HTTPError as exc:
             raise TTSError("暂时无法连接语音服务，请检查网络后再试。") from exc

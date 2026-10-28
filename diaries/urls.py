@@ -11,6 +11,11 @@ urlpatterns = [
     path("<uuid:diary_id>/edit/", views.diary_edit, name="diary_edit"),
     path("<uuid:diary_id>/translate/", views.diary_translate, name="diary_translate"),
     path(
+        "<uuid:diary_id>/read-aloud/",
+        views.diary_read_aloud,
+        name="diary_read_aloud",
+    ),
+    path(
         "<uuid:diary_id>/english/",
         views.diary_edit_english,
         name="diary_edit_english",

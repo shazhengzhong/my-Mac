@@ -14,6 +14,7 @@ from services.translation import TranslationPair
 from .models import (
     AudioAsset,
     DiaryEntry,
+    DiaryReadAloud,
     EnglishVersion,
     PronunciationAttempt,
     Recording,
@@ -315,6 +316,50 @@ def create_word_tts_render(
                 style=result.style,
                 cache_key=cache_key,
                 char_count=len(word),
+            )
+    except Exception:
+        remove_private_bytes(relative_path)
+        raise
+
+
+def create_diary_read_aloud(
+    *,
+    owner,
+    version,
+    sentence,
+    result,
+    timings,
+    char_count: int,
+) -> DiaryReadAloud:
+    """Store a private full-diary read-aloud and its word timings atomically."""
+    relative_path, digest, byte_size = write_private_bytes(
+        owner_id=owner.pk,
+        purpose="diary_tts",
+        data=result.data,
+        extension=result.extension,
+    )
+    try:
+        with transaction.atomic():
+            asset = AudioAsset.objects.create(
+                owner=owner,
+                sentence=sentence,
+                purpose=AudioAsset.Purpose.DIARY_TTS,
+                relative_path=relative_path,
+                content_type=result.content_type,
+                byte_size=byte_size,
+                duration_ms=result.duration_ms,
+                sha256=digest,
+            )
+            return DiaryReadAloud.objects.create(
+                owner=owner,
+                version=version,
+                audio=asset,
+                provider=result.provider,
+                model=result.model,
+                voice=result.voice,
+                style=result.style,
+                char_count=char_count,
+                timings=list(timings),
             )
     except Exception:
         remove_private_bytes(relative_path)

@@ -55,6 +55,7 @@ from services.tts import (
 from .models import (
     AudioAsset,
     DiaryEntry,
+    DiaryReadAloud,
     EnglishVersion,
     PronunciationAttempt,
     Recording,
@@ -980,6 +981,89 @@ class WordTTSFlowTests(AudioTestBase):
         self.assertFalse(WordTtsRender.objects.exists())
 
 
+class ReadAloudFlowTests(AudioTestBase):
+    def _make_aligned_diary(self, text="Hello there. How are you?"):
+        diary = make_diary(self.owner)
+        version = create_aligned_english_version(
+            diary,
+            [TranslationPair("你好。", text)],
+            source="manual",
+        )
+        return diary, version
+
+    def test_read_aloud_generates_private_audio_and_timings(self):
+        diary, version = self._make_aligned_diary()
+        url = reverse("diary_read_aloud", args=[diary.id])
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["cached"])
+        self.assertTrue(payload["timings"])
+        self.assertIn("/diaries/audio/", payload["audio_url"])
+
+        read = DiaryReadAloud.objects.get(owner=self.owner, version=version)
+        self.assertEqual(read.audio.purpose, AudioAsset.Purpose.DIARY_TTS)
+        self.assertTrue(read.timings)
+        path = Path(self.media_dir.name) / read.audio.relative_path
+        self.assertTrue(path.exists())
+
+        counter = UsageCounter.objects.get(user=self.owner, feature="tts")
+        self.assertEqual(counter.request_count, 1)
+        self.assertEqual(
+            counter.char_count,
+            len("Hello there.\nHow are you?"),
+        )
+
+        second = self.client.post(url)
+        self.assertEqual(second.status_code, 200)
+        second_payload = second.json()
+        self.assertTrue(second_payload["cached"])
+        self.assertEqual(second_payload["audio_url"], payload["audio_url"])
+        self.assertEqual(DiaryReadAloud.objects.count(), 1)
+        counter.refresh_from_db()
+        self.assertEqual(counter.request_count, 1)
+
+    def test_cross_user_and_anonymous_cannot_generate_read_aloud(self):
+        other = make_diary(self.member)
+        create_aligned_english_version(
+            other,
+            [TranslationPair("你好。", "Hello there.")],
+            source="manual",
+        )
+        url = reverse("diary_read_aloud", args=[other.id])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 404)
+
+        self.client.logout()
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+
+    def test_read_aloud_requires_post(self):
+        diary, _version = self._make_aligned_diary()
+        response = self.client.get(reverse("diary_read_aloud", args=[diary.id]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_deleting_diary_removes_read_aloud_audio(self):
+        diary, _version = self._make_aligned_diary()
+        self.client.post(reverse("diary_read_aloud", args=[diary.id]))
+        read = DiaryReadAloud.objects.get(owner=self.owner)
+        path = Path(self.media_dir.name) / read.audio.relative_path
+        self.assertTrue(path.exists())
+
+        self.client.post(reverse("diary_delete", args=[diary.id]))
+        self.assertFalse(path.exists())
+        self.assertFalse(DiaryReadAloud.objects.exists())
+
+    def test_karaoke_spans_and_read_aloud_control_render(self):
+        diary, _version = self._make_aligned_diary()
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "data-read-aloud")
+        self.assertContains(response, "karaoke-word")
+        self.assertContains(response, "全文朗读")
+
+
 class VolcengineTTSServiceTests(TestCase):
     PCM = b"\x00\x01" * 24_000  # one second at 24 kHz, 16-bit mono
 
@@ -1083,6 +1167,87 @@ class VolcengineTTSServiceTests(TestCase):
 
         audio = captured["payload"]["req_params"]["audio_params"]
         self.assertEqual(audio["speech_rate"], -20)
+
+    def test_mock_tts_can_return_timings(self):
+        result = MockTTSProvider().synthesize(
+            "Hello there.",
+            speed="normal",
+            style="natural",
+            enable_subtitles=True,
+        )
+        self.assertEqual(len(result.timings), 2)
+        self.assertEqual(result.timings[0]["word"], "Hello")
+
+    def test_subtitle_timings_are_collected(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            events = [
+                {
+                    "code": 0,
+                    "data": base64.b64encode(
+                        self.PCM[: len(self.PCM) // 2]
+                    ).decode("ascii"),
+                },
+                {
+                    "code": 0,
+                    "sentence": {
+                        "text": "Hello there.",
+                        "words": [
+                            {
+                                "word": "Hello",
+                                "startTime": 0.1,
+                                "endTime": 0.4,
+                            },
+                            {
+                                "word": "there.",
+                                "startTime": 0.4,
+                                "endTime": 0.7,
+                            },
+                        ],
+                    },
+                },
+                {
+                    "code": 0,
+                    "data": base64.b64encode(
+                        self.PCM[len(self.PCM) // 2 :]
+                    ).decode("ascii"),
+                },
+                {"code": 20_000_000, "usage": {"text_words": 12}},
+            ]
+            body = (
+                "\n\n".join(
+                    f"data: {json.dumps(event)}" for event in events
+                )
+                + "\n\n"
+            ).encode("utf-8")
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=body,
+            )
+
+        provider = self._provider(handler)
+        result = provider.synthesize(
+            "Hello there.",
+            speed="normal",
+            style="natural",
+            enable_subtitles=True,
+        )
+
+        self.assertEqual(
+            result.timings,
+            (
+                {"word": "Hello", "start_ms": 100, "end_ms": 400},
+                {"word": "there.", "start_ms": 400, "end_ms": 700},
+            ),
+        )
+        self.assertTrue(
+            captured["payload"]["req_params"]["audio_params"][
+                "enable_subtitle"
+            ]
+        )
 
     def test_word_tts_context_mapping(self):
         self.assertEqual(word_tts_context("I'm"), "I'm going home now.")

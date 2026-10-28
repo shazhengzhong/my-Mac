@@ -35,13 +35,27 @@
       </div>
     {% endif %}
 
+    {% if current and has_aligned_chinese %}
+      <div
+        class="read-aloud-control en-only"
+        data-read-aloud
+        data-url="{% url 'diary_read_aloud' diary.id %}"
+      >
+        <button type="button" class="button" data-read-aloud-button>全文朗读</button>
+        <span class="read-aloud-status" role="status" aria-live="polite"></span>
+        <audio class="read-aloud-audio" controls preload="none" hidden></audio>
+      </div>
+    {% endif %}
+
     {% if has_aligned_chinese %}
       <div class="bilingual-list">
         {% for group in bilingual_groups %}
           <div class="bilingual-group">
             <p class="bilingual-zh zh-only">{{ group.chinese_text }}</p>
             {% for sentence in group.sentences %}
-              <p class="bilingual-en en-only" lang="en">{{ sentence.text }}</p>
+              <p class="bilingual-en en-only karaoke-line" lang="en">
+                {% for word in sentence.karaoke_words %}<span class="karaoke-word">{{ word }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
+              </p>
             {% endfor %}
           </div>
         {% endfor %}
@@ -262,5 +276,6 @@
 {% block scripts %}
   <script src="{% static 'js/word-assessor.js' %}" defer></script>
   <script src="{% static 'js/word-player.js' %}" defer></script>
+  <script src="{% static 'js/read-aloud.js' %}" defer></script>
   <script src="{% static 'js/view-mode.js' %}" defer></script>
 {% endblock %}

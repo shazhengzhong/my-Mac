@@ -164,6 +164,7 @@ class AudioAsset(models.Model):
         RECORDING = "recording", "用户录音"
         TTS = "tts", "示范朗读"
         WORD_TTS = "word_tts", "单词发音"
+        DIARY_TTS = "diary_tts", "全文朗读"
         ASSESSMENT = "assessment", "单词测评"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -297,6 +298,38 @@ class WordTtsRender(models.Model):
 
     def __str__(self) -> str:
         return f"单词发音 {self.target_word} {self.id}"
+
+
+class DiaryReadAloud(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="diary_read_alouds",
+    )
+    version = models.OneToOneField(
+        EnglishVersion,
+        on_delete=models.CASCADE,
+        related_name="read_aloud",
+    )
+    audio = models.OneToOneField(
+        AudioAsset,
+        on_delete=models.CASCADE,
+        related_name="diary_read_aloud",
+    )
+    provider = models.CharField(max_length=40)
+    model = models.CharField(max_length=100)
+    voice = models.CharField(max_length=100)
+    style = models.CharField(max_length=40)
+    char_count = models.PositiveIntegerField(default=0)
+    timings = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"全文朗读 v{self.version.version_no} {self.id}"
 
 
 class PronunciationAttempt(models.Model):

@@ -716,6 +716,57 @@ button.button {
   margin-top: 0.35rem;
 }
 
+.read-aloud-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.9rem;
+}
+
+.read-aloud-status {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.read-aloud-status:empty {
+  display: none;
+}
+
+.read-aloud-status[data-kind="loading"] {
+  color: var(--accent-dark);
+}
+
+.read-aloud-status[data-kind="warning"] {
+  color: #8a5a00;
+}
+
+.read-aloud-status[data-kind="error"] {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.read-aloud-audio {
+  width: 100%;
+  max-width: 30rem;
+}
+
+.karaoke-word {
+  border-radius: 3px;
+  padding: 0 0.04em;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.karaoke-word.karaoke-done {
+  color: var(--accent-dark);
+}
+
+.karaoke-word.karaoke-active {
+  background: #ffe9a8;
+  color: #22332e;
+  box-shadow: 0 0 0 2px #ffe9a8;
+}
+
 .sentence-list {
   list-style: none;
   counter-reset: sentence;
