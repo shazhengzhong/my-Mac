@@ -36,6 +36,17 @@ urlpatterns = [
         views.upload_recording,
         name="upload_recording",
     ),
+    path("words/", views.word_lookup, name="word_lookup"),
+    path(
+        "words/lookup/<uuid:lookup_id>/tts/",
+        views.lookup_tts,
+        name="lookup_tts",
+    ),
+    path(
+        "words/lookup/<uuid:lookup_id>/assess/",
+        views.assess_lookup,
+        name="assess_lookup",
+    ),
     path(
         "words/<uuid:token_id>/tts/",
         views.word_tts,

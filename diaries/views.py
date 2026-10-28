@@ -34,6 +34,7 @@ from .models import (
     PronunciationAttempt,
     Sentence,
     TtsRender,
+    WordLookup,
     WordToken,
     WordTtsRender,
 )
@@ -51,6 +52,7 @@ from .services import (
     create_recording,
     create_tts_render,
     create_word_tts_render,
+    lookup_word,
 )
 
 
@@ -667,6 +669,173 @@ def assess_word(request, token_id):
         attempt = create_pronunciation_attempt(
             owner=request.user,
             word_token=token,
+            data=data,
+            duration_ms=duration_ms,
+            result=result,
+        )
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "测评结果保存失败，请稍后再试。"},
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "attempt_id": str(attempt.id),
+            "overall_score": result.overall_score,
+            "accuracy": result.accuracy,
+            "fluency": result.fluency,
+            "completeness": result.completeness,
+            "match_tag": result.match_tag,
+            "detail": result.detail,
+            "audio_url": reverse("serve_audio_asset", args=[attempt.audio_id]),
+        }
+    )
+
+
+@login_required
+@never_cache
+def word_lookup(request):
+    query = ""
+    lookup = None
+    error = ""
+    if request.method == "POST":
+        query = (request.POST.get("q") or "").strip()
+        try:
+            lookup = lookup_word(request.user, query)
+        except ValidationError as exc:
+            error = "；".join(exc.messages)
+        except TranslationQuotaExceeded as exc:
+            error = str(exc)
+        except TranslationError as exc:
+            error = str(exc)
+
+    return render(
+        request,
+        "diaries/lookup.html",
+        {
+            "query": query,
+            "lookup": lookup,
+            "error": error,
+            "tts": _tts_status(),
+            "assessment": _assessment_status(),
+        },
+    )
+
+
+@login_required
+@require_POST
+@never_cache
+def lookup_tts(request, lookup_id):
+    lookup = get_object_or_404(WordLookup, pk=lookup_id)
+    try:
+        provider = get_tts_provider()
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
+
+    style = "natural"
+    speed = "word"
+    text = lookup.word
+    context = word_tts_context(text)
+    cache_key = tts_cache_key(
+        provider=provider.provider,
+        model=provider.model,
+        voice=provider.voice,
+        style=style,
+        speed=speed,
+        rate=provider.speech_rate(speed),
+        text=text,
+        context=context,
+    )
+    existing = (
+        WordTtsRender.objects.filter(owner=request.user, cache_key=cache_key)
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return JsonResponse(
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset", args=[existing.audio_id]
+                ),
+                "cached": True,
+                "duration_ms": existing.audio.duration_ms,
+            }
+        )
+
+    try:
+        consume_tts_quota(request.user, len(text))
+        result = provider.synthesize(
+            text, speed=speed, style=style, context_text=context
+        )
+        render = create_word_tts_render(
+            owner=request.user,
+            lookup=lookup,
+            word=lookup.display_word,
+            result=result,
+            cache_key=cache_key,
+        )
+    except TTSQuotaExceeded as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "单词发音生成失败，请稍后再试。"},
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "audio_url": reverse("serve_audio_asset", args=[render.audio_id]),
+            "cached": False,
+            "duration_ms": result.duration_ms,
+        }
+    )
+
+
+@login_required
+@require_POST
+@never_cache
+def assess_lookup(request, lookup_id):
+    lookup = get_object_or_404(WordLookup, pk=lookup_id)
+    uploaded = request.FILES.get("audio")
+    if uploaded is None:
+        return JsonResponse({"ok": False, "error": "没有收到录音文件。"}, status=400)
+
+    data = uploaded.read()
+    try:
+        duration_ms = validate_assessment_wav(data)
+    except AudioValidationError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    try:
+        assessor = get_assessor()
+    except AssessmentError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
+
+    try:
+        consume_assessment_quota(request.user, lookup.word)
+    except AssessmentQuotaExceeded as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
+
+    try:
+        result = assessor.assess(lookup.word, data)
+    except AssessmentError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "单词测评失败，请稍后再试。"},
+            status=500,
+        )
+
+    try:
+        attempt = create_pronunciation_attempt(
+            owner=request.user,
+            lookup=lookup,
             data=data,
             duration_ms=duration_ms,
             result=result,

@@ -135,6 +135,25 @@ class WordToken(models.Model):
         return self.surface
 
 
+class WordLookup(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    word = models.CharField(max_length=120, unique=True)
+    display_word = models.CharField(max_length=120)
+    ipa = models.CharField(max_length=120, blank=True, default="")
+    syllables = models.CharField(max_length=255, blank=True, default="")
+    translation = models.TextField()
+    part_of_speech = models.CharField(max_length=40, blank=True, default="")
+    provider = models.CharField(max_length=40)
+    model = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["word"]
+
+    def __str__(self) -> str:
+        return self.display_word
+
+
 class UsageCounter(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
@@ -177,6 +196,8 @@ class AudioAsset(models.Model):
         Sentence,
         on_delete=models.CASCADE,
         related_name="audio_assets",
+        null=True,
+        blank=True,
     )
     purpose = models.CharField(max_length=20, choices=Purpose.choices)
     relative_path = models.CharField(max_length=255, unique=True)
@@ -272,6 +293,15 @@ class WordTtsRender(models.Model):
         Sentence,
         on_delete=models.CASCADE,
         related_name="word_tts_renders",
+        null=True,
+        blank=True,
+    )
+    lookup = models.ForeignKey(
+        WordLookup,
+        on_delete=models.CASCADE,
+        related_name="word_tts_renders",
+        null=True,
+        blank=True,
     )
     audio = models.OneToOneField(
         AudioAsset,
@@ -293,7 +323,14 @@ class WordTtsRender(models.Model):
             models.UniqueConstraint(
                 fields=["owner", "cache_key"],
                 name="diaries_unique_user_word_tts_cache",
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(sentence__isnull=False, lookup__isnull=True)
+                    | models.Q(sentence__isnull=True, lookup__isnull=False)
+                ),
+                name="diaries_word_tts_one_target",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -361,6 +398,15 @@ class PronunciationAttempt(models.Model):
         WordToken,
         on_delete=models.CASCADE,
         related_name="assessment_attempts",
+        null=True,
+        blank=True,
+    )
+    lookup = models.ForeignKey(
+        WordLookup,
+        on_delete=models.CASCADE,
+        related_name="pronunciation_attempts",
+        null=True,
+        blank=True,
     )
     audio = models.OneToOneField(
         AudioAsset,
@@ -380,6 +426,15 @@ class PronunciationAttempt(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(word_token__isnull=False, lookup__isnull=True)
+                    | models.Q(word_token__isnull=True, lookup__isnull=False)
+                ),
+                name="diaries_assessment_one_target",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"测评 {self.target_word} {self.id}"

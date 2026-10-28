@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}查词 · 家庭英语日记{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">词汇练习</p>
+      <h1>查词</h1>
+      <p class="muted">输入一个英文单词，查看中文释义、音标、音节和发音。</p>
+    </div>
+  </div>
+
+  <section class="card">
+    <form method="post" class="lookup-form">
+      {% csrf_token %}
+      <label for="lookup-q">英文单词</label>
+      <div class="lookup-input-row">
+        <input
+          id="lookup-q"
+          name="q"
+          type="text"
+          value="{{ query }}"
+          placeholder="例如 comfortable"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          maxlength="120"
+          required
+        >
+        <button class="button" type="submit">查询</button>
+      </div>
+    </form>
+    {% if error %}
+      <div class="notice warning">{{ error }}</div>
+    {% endif %}
+  </section>
+
+  {% if tts.is_mock %}
+    <div class="notice">当前单词发音是模拟提示音，不联网、不产生费用。</div>
+  {% elif not tts.ready %}
+    <div class="notice warning">{{ tts.message }}</div>
+  {% endif %}
+  {% if assessment.is_mock %}
+    <div class="notice">当前录音测评是模拟模式，会返回固定分数，不联网、不产生费用。</div>
+  {% elif not assessment.ready %}
+    <div class="notice warning">{{ assessment.message }}</div>
+  {% endif %}
+
+  {% if lookup %}
+    <section class="card">
+      <div class="lookup-word-card word-chip">
+        {% if tts.ready %}
+          <button
+            class="word-surface word-play"
+            type="button"
+            lang="en"
+            data-word-play
+            data-word-play-url="{% url 'lookup_tts' lookup.id %}"
+            aria-label="播放 {{ lookup.display_word }} 的发音"
+            title="点击播放 {{ lookup.display_word }} 的发音"
+          >{{ lookup.display_word }}</button>
+        {% else %}
+          <span class="word-surface" lang="en">{{ lookup.display_word }}</span>
+        {% endif %}
+        {% if lookup.ipa %}
+          <span class="ipa">/{{ lookup.ipa }}/</span>
+        {% else %}
+          <span class="ipa unknown">词典未收录音标</span>
+        {% endif %}
+        {% if lookup.syllables %}
+          <span class="syllable-hint">{{ lookup.syllables }}</span>
+        {% elif lookup.ipa %}
+          <span class="syllable-hint">单音节</span>
+        {% endif %}
+        {% if tts.ready %}
+          <span class="word-play-status" role="status" aria-live="polite"></span>
+        {% endif %}
+        {% if assessment.ready %}
+          <button
+            class="assess-button"
+            type="button"
+            data-assess-button
+            data-assess-url="{% url 'assess_lookup' lookup.id %}"
+            data-word="{{ lookup.display_word }}"
+          >录音测评</button>
+          <span class="assess-result" role="status" aria-live="polite"></span>
+        {% endif %}
+      </div>
+
+      <div class="lookup-translation">
+        {% if lookup.part_of_speech %}
+          <p class="muted">{{ lookup.part_of_speech }}</p>
+        {% endif %}
+        <p>{{ lookup.translation|linebreaksbr }}</p>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'js/word-player.js' %}" defer></script>
+  <script src="{% static 'js/word-assessor.js' %}" defer></script>
+{% endblock %}

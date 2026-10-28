@@ -1,15 +1,22 @@
 """Domain services for English versions and daily provider limits."""
 
+import re
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.utils import timezone
 
 from services.audio import remove_private_bytes, write_private_bytes
-from services.pronunciation import analyze_sentence
+from services.pronunciation import (
+    analyze_sentence,
+    ipa_for_word,
+    normalize_word,
+    syllable_hint,
+)
 from services.text import split_english_sentences
-from services.translation import TranslationPair
+from services.translation import TranslationPair, get_translator
 
 from .models import (
     AudioAsset,
@@ -21,10 +28,46 @@ from .models import (
     Sentence,
     TtsRender,
     UsageCounter,
+    WordLookup,
     WordToken,
     WordTtsRender,
     text_hash,
 )
+
+_WORD_LOOKUP_RE = re.compile(r"^[A-Za-z][A-Za-z'’\-]{0,119}$")
+
+
+def lookup_word(user, query: str) -> WordLookup:
+    """Return a cached dictionary entry, translating a new word when needed."""
+    cleaned = (query or "").strip()
+    if not cleaned:
+        raise ValidationError("请输入英文单词。")
+    if not _WORD_LOOKUP_RE.match(cleaned):
+        raise ValidationError("请输入单个英文单词（字母、撇号或连字符）。")
+
+    normalized = normalize_word(cleaned)
+    existing = WordLookup.objects.filter(word=normalized).first()
+    if existing is not None:
+        return existing
+
+    translator = get_translator()
+    consume_translation_quota(user, len(cleaned))
+    translation = translator.translate_word(cleaned)
+    ipa = ipa_for_word(normalized) or ""
+    syllables = syllable_hint(cleaned)
+    try:
+        return WordLookup.objects.create(
+            word=normalized,
+            display_word=cleaned,
+            ipa=ipa,
+            syllables=syllables,
+            translation=translation.translation,
+            part_of_speech=translation.part_of_speech[:40],
+            provider=translator.source,
+            model=translator.model,
+        )
+    except IntegrityError:
+        return WordLookup.objects.get(word=normalized)
 
 
 class TranslationQuotaExceeded(Exception):
@@ -98,12 +141,19 @@ def consume_assessment_quota(user, word: str) -> None:
 def create_pronunciation_attempt(
     *,
     owner,
-    word_token,
+    word_token=None,
+    lookup=None,
     data: bytes,
     duration_ms: int,
     result,
 ) -> PronunciationAttempt:
     """Store a private word recording and its assessment result atomically."""
+    if (word_token is None) == (lookup is None):
+        raise ValueError("Exactly one assessment target is required")
+    sentence = word_token.sentence if word_token is not None else None
+    target_word = (
+        word_token.surface if word_token is not None else lookup.display_word
+    )
     relative_path, digest, byte_size = write_private_bytes(
         owner_id=owner.pk,
         purpose="assessments",
@@ -114,7 +164,7 @@ def create_pronunciation_attempt(
         with transaction.atomic():
             asset = AudioAsset.objects.create(
                 owner=owner,
-                sentence=word_token.sentence,
+                sentence=sentence,
                 purpose=AudioAsset.Purpose.ASSESSMENT,
                 relative_path=relative_path,
                 content_type="audio/wav",
@@ -125,8 +175,9 @@ def create_pronunciation_attempt(
             return PronunciationAttempt.objects.create(
                 owner=owner,
                 word_token=word_token,
+                lookup=lookup,
                 audio=asset,
-                target_word=word_token.surface,
+                target_word=target_word,
                 provider=result.provider,
                 model=result.model,
                 overall_score=result.overall_score,
@@ -281,12 +332,15 @@ def _create_version_with_sentences(
 def create_word_tts_render(
     *,
     owner,
-    sentence,
+    sentence=None,
+    lookup=None,
     word: str,
     result,
     cache_key: str,
 ) -> WordTtsRender:
     """Store a per-user word pronunciation and roll back the file on DB failure."""
+    if (sentence is None) == (lookup is None):
+        raise ValueError("Exactly one word TTS target is required")
     relative_path, digest, byte_size = write_private_bytes(
         owner_id=owner.pk,
         purpose="word_tts",
@@ -308,6 +362,7 @@ def create_word_tts_render(
             return WordTtsRender.objects.create(
                 owner=owner,
                 sentence=sentence,
+                lookup=lookup,
                 audio=asset,
                 target_word=word,
                 provider=result.provider,

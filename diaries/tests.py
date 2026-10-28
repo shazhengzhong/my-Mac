@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 import wave
 
 import httpx
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -62,10 +63,16 @@ from .models import (
     Sentence,
     TtsRender,
     UsageCounter,
+    WordLookup,
     WordToken,
     WordTtsRender,
 )
-from .services import create_aligned_english_version, create_english_version
+from .services import (
+    TranslationQuotaExceeded,
+    create_aligned_english_version,
+    create_english_version,
+    lookup_word,
+)
 
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 PASSWORD = "Brisk-Cobalt-Orbit-42"
@@ -229,6 +236,53 @@ class TranslationServiceTests(TestCase):
         pairs = MockTranslator().translate_pairs("今天很好。")
         self.assertEqual(len(pairs), 3)
         self.assertTrue(all(pair.chinese and pair.english for pair in pairs))
+
+    def test_mock_translator_returns_word_translation(self):
+        result = MockTranslator().translate_word("water")
+        self.assertIn("water", result.translation)
+
+    def test_deepseek_word_request_shape_and_response(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "translation": "水；水域",
+                                        "part_of_speech": "n.",
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        translator = DeepSeekTranslator(
+            api_key="test-key",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            client=client,
+        )
+        result = translator.translate_word("water")
+
+        self.assertEqual(result.translation, "水；水域")
+        self.assertEqual(result.part_of_speech, "n.")
+        self.assertEqual(
+            captured["payload"]["messages"][1]["content"], "water"
+        )
+        self.assertIn(
+            "English-Chinese dictionary",
+            captured["payload"]["messages"][0]["content"],
+        )
 
     def test_deepseek_pair_request_shape_and_response(self):
         captured = {}
@@ -1758,3 +1812,154 @@ class AssessmentFlowTests(AudioTestBase):
         response = self.client.get(reverse("diary_detail", args=[diary.id]))
         self.assertContains(response, "准确度")
         self.assertContains(response, "86")
+
+
+class WordLookupServiceTests(DiaryFixtureMixin, TestCase):
+    def test_lookup_word_uses_dictionary_and_cache(self):
+        lookup = lookup_word(self.owner, "water")
+        self.assertEqual(lookup.word, "water")
+        self.assertEqual(lookup.display_word, "water")
+        self.assertEqual(lookup.ipa, "ˈwɔtər")
+        self.assertIn("·", lookup.syllables)
+        self.assertIn("模拟释义", lookup.translation)
+
+        counter = UsageCounter.objects.get(user=self.owner, feature="translation")
+        self.assertEqual(counter.request_count, 1)
+
+        again = lookup_word(self.owner, "Water")
+        self.assertEqual(again.pk, lookup.pk)
+        counter.refresh_from_db()
+        self.assertEqual(counter.request_count, 1)
+
+    def test_lookup_word_rejects_invalid_input(self):
+        with self.assertRaises(ValidationError):
+            lookup_word(self.owner, "")
+        with self.assertRaises(ValidationError):
+            lookup_word(self.owner, "hello world")
+
+    @override_settings(TRANSLATION_DAILY_REQUEST_LIMIT=0)
+    def test_lookup_word_quota_blocks_new_word(self):
+        with self.assertRaises(TranslationQuotaExceeded):
+            lookup_word(self.owner, "water")
+        self.assertFalse(WordLookup.objects.exists())
+
+
+class WordLookupPageTests(DiaryFixtureMixin, TestCase):
+    def test_lookup_page_requires_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("word_lookup"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_lookup_page_renders_result_and_controls(self):
+        response = self.client.post(reverse("word_lookup"), {"q": "water"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "water")
+        self.assertContains(response, "ˈwɔtər")
+        self.assertContains(response, "wa·ter")
+        self.assertContains(response, "模拟释义")
+        self.assertContains(response, "data-word-play")
+        self.assertContains(response, "data-assess-button")
+        self.assertEqual(WordLookup.objects.count(), 1)
+
+    def test_lookup_page_reuses_cached_word(self):
+        first = self.client.post(reverse("word_lookup"), {"q": "water"})
+        second = self.client.post(reverse("word_lookup"), {"q": "Water"})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(WordLookup.objects.count(), 1)
+        counter = UsageCounter.objects.get(user=self.owner, feature="translation")
+        self.assertEqual(counter.request_count, 1)
+
+    def test_lookup_page_shows_error_for_invalid_word(self):
+        response = self.client.post(
+            reverse("word_lookup"), {"q": "hello world"}
+        )
+        self.assertContains(response, "单个英文单词")
+        self.assertFalse(WordLookup.objects.exists())
+
+
+class LookupTTSFlowTests(AudioTestBase):
+    def _lookup(self):
+        return lookup_word(self.owner, "water")
+
+    def test_lookup_tts_generates_private_audio_and_cache(self):
+        lookup = self._lookup()
+        url = reverse("lookup_tts", args=[lookup.id])
+
+        first = self.client.post(url)
+        self.assertEqual(first.status_code, 200)
+        payload = first.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["cached"])
+        self.assertIn("/diaries/audio/", payload["audio_url"])
+
+        render = WordTtsRender.objects.get(owner=self.owner, lookup=lookup)
+        self.assertIsNone(render.sentence)
+        self.assertEqual(render.target_word, "water")
+        self.assertEqual(render.audio.purpose, AudioAsset.Purpose.WORD_TTS)
+        path = Path(self.media_dir.name) / render.audio.relative_path
+        self.assertTrue(path.exists())
+
+        second = self.client.post(url)
+        self.assertTrue(second.json()["cached"])
+        self.assertEqual(WordTtsRender.objects.count(), 1)
+
+    def test_lookup_tts_requires_post(self):
+        lookup = self._lookup()
+        response = self.client.get(reverse("lookup_tts", args=[lookup.id]))
+        self.assertEqual(response.status_code, 405)
+
+
+class LookupAssessmentFlowTests(AudioTestBase):
+    def test_lookup_assessment_creates_attempt(self):
+        lookup = lookup_word(self.owner, "water")
+        upload = SimpleUploadedFile(
+            "word.wav",
+            self.wav_bytes(500),
+            content_type="audio/wav",
+        )
+        response = self.client.post(
+            reverse("assess_lookup", args=[lookup.id]),
+            {"audio": upload},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["overall_score"], 86.0)
+
+        attempt = PronunciationAttempt.objects.get(
+            owner=self.owner, lookup=lookup
+        )
+        self.assertIsNone(attempt.word_token)
+        self.assertEqual(attempt.target_word, "water")
+        self.assertIsNone(attempt.audio.sentence)
+        counter = UsageCounter.objects.get(
+            user=self.owner, feature="assessment"
+        )
+        self.assertEqual(counter.request_count, 1)
+
+    def test_lookup_assessment_requires_login(self):
+        lookup = lookup_word(self.owner, "water")
+        self.client.logout()
+        upload = SimpleUploadedFile(
+            "word.wav",
+            self.wav_bytes(500),
+            content_type="audio/wav",
+        )
+        response = self.client.post(
+            reverse("assess_lookup", args=[lookup.id]),
+            {"audio": upload},
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_lookup_assessment_rejects_invalid_audio(self):
+        lookup = lookup_word(self.owner, "water")
+        upload = SimpleUploadedFile(
+            "bad.txt", b"not audio", content_type="text/plain"
+        )
+        response = self.client.post(
+            reverse("assess_lookup", args=[lookup.id]),
+            {"audio": upload},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PronunciationAttempt.objects.exists())

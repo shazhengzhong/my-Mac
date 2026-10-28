@@ -1242,3 +1242,65 @@ button.button {
     display: none !important;
   }
 }
+
+.lookup-form label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 650;
+}
+
+.lookup-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.lookup-input-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+
+.lookup-word-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfaf6;
+}
+
+.lookup-word-card .word-surface {
+  font-size: 1.7rem;
+}
+
+.lookup-word-card .ipa {
+  font-size: 1rem;
+}
+
+.lookup-word-card .syllable-hint {
+  font-size: 0.95rem;
+}
+
+.lookup-word-card .word-play-status,
+.lookup-word-card .assess-result {
+  font-size: 0.85rem;
+}
+
+.lookup-translation {
+  margin-top: 1rem;
+  font-size: 1.02rem;
+  line-height: 1.8;
+}
+
+.lookup-translation p {
+  margin: 0.25rem 0;
+}

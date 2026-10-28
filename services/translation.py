@@ -40,6 +40,13 @@ PAIR_SYSTEM_PROMPT = (
     "facts, explanations, or commentary. Do not use markdown or code fences."
 )
 
+WORD_SYSTEM_PROMPT = (
+    "You are a concise English-Chinese dictionary. For the English word the user sends, "
+    'return only a JSON object of the form {"translation": "中文释义", '
+    '"part_of_speech": "词性，如 n./v./adj."}. Do not add examples, pronunciation, '
+    "or commentary. Do not use markdown or code fences."
+)
+
 
 class TranslationError(Exception):
     """A user-safe translation failure; never include secrets or diary content."""
@@ -51,6 +58,12 @@ class TranslationPair:
     english: str
 
 
+@dataclass(frozen=True)
+class WordTranslation:
+    translation: str
+    part_of_speech: str = ""
+
+
 class Translator(Protocol):
     source: str
     model: str
@@ -58,6 +71,8 @@ class Translator(Protocol):
     def translate(self, chinese_text: str) -> str: ...
 
     def translate_pairs(self, chinese_text: str) -> list[TranslationPair]: ...
+
+    def translate_word(self, word: str) -> WordTranslation: ...
 
 
 class MockTranslator:
@@ -74,6 +89,15 @@ class MockTranslator:
             TranslationPair(chinese=chinese, english=english)
             for chinese, english in MOCK_PAIRS
         ]
+
+    def translate_word(self, word: str) -> WordTranslation:
+        cleaned = (word or "").strip()
+        if not cleaned:
+            raise TranslationError("请输入英文单词。")
+        return WordTranslation(
+            translation=f"（模拟释义）{cleaned} 的中文意思。",
+            part_of_speech="",
+        )
 
 
 def _parse_json_payload(content: str):
@@ -218,6 +242,44 @@ class DeepSeekTranslator:
         try:
             with httpx.Client(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
                 return self._request_pairs(client, chinese_text)
+        except httpx.HTTPError as exc:
+            raise TranslationError("暂时无法连接翻译服务，请检查网络后再试。") from exc
+
+    def _request_word(self, client: httpx.Client, word: str) -> WordTranslation:
+        content = self._post(
+            client,
+            [
+                {"role": "system", "content": WORD_SYSTEM_PROMPT},
+                {"role": "user", "content": word},
+            ],
+        )
+        try:
+            parsed = _parse_json_payload(content)
+        except TranslationError:
+            parsed = None
+        if isinstance(parsed, dict):
+            translation = parsed.get("translation")
+            part_of_speech = parsed.get("part_of_speech") or ""
+            if isinstance(translation, str) and translation.strip():
+                return WordTranslation(
+                    translation=translation.strip(),
+                    part_of_speech=str(part_of_speech).strip(),
+                )
+
+        cleaned = content.strip()
+        if not cleaned:
+            raise TranslationError("翻译服务没有返回中文释义，请重试。")
+        return WordTranslation(translation=cleaned)
+
+    def translate_word(self, word: str) -> WordTranslation:
+        word = (word or "").strip()
+        if not word:
+            raise TranslationError("请输入英文单词。")
+        if self._client is not None:
+            return self._request_word(self._client, word)
+        try:
+            with httpx.Client(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
+                return self._request_word(client, word)
         except httpx.HTTPError as exc:
             raise TranslationError("暂时无法连接翻译服务，请检查网络后再试。") from exc
 
