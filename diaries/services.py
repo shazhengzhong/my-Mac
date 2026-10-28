@@ -326,6 +326,7 @@ def create_diary_read_aloud(
     *,
     owner,
     version,
+    speed: str,
     sentence,
     result,
     timings,
@@ -353,6 +354,7 @@ def create_diary_read_aloud(
             return DiaryReadAloud.objects.create(
                 owner=owner,
                 version=version,
+                speed=speed,
                 audio=asset,
                 provider=result.provider,
                 model=result.model,

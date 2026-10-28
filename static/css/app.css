@@ -861,6 +861,11 @@ button.button {
   outline-offset: 1px;
 }
 
+.view-toggle-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .english-sentence {
   margin-bottom: 0.85rem;
   color: #22332e;

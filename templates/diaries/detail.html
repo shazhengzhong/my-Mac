@@ -41,6 +41,11 @@
         data-read-aloud
         data-url="{% url 'diary_read_aloud' diary.id %}"
       >
+        <span class="muted small">速度</span>
+        <div class="view-toggle" role="group" aria-label="朗读速度">
+          <button class="view-toggle-button" type="button" data-read-aloud-speed="normal" aria-pressed="true">正常</button>
+          <button class="view-toggle-button" type="button" data-read-aloud-speed="slow" aria-pressed="false">慢速</button>
+        </div>
         <button type="button" class="button" data-read-aloud-button>全文朗读</button>
         <span class="read-aloud-status" role="status" aria-live="polite"></span>
         <audio class="read-aloud-audio" controls preload="none" hidden></audio>

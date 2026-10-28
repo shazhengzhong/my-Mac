@@ -13,6 +13,11 @@
   }
 
   const url = control.dataset.url;
+  const speedButtons = Array.from(
+    control.querySelectorAll("[data-read-aloud-speed]"),
+  );
+  const SPEED_KEY = "familyDiaryReadAloudSpeed";
+  let speed = "normal";
   let timings = [];
   let spans = [];
   let animation = null;
@@ -42,6 +47,51 @@
     if (animation !== null) {
       cancelAnimationFrame(animation);
       animation = null;
+    }
+  }
+
+  function speedLabel(value) {
+    return value === "slow" ? "慢速" : "正常";
+  }
+
+  function applySpeedState() {
+    speedButtons.forEach((button) => {
+      button.setAttribute(
+        "aria-pressed",
+        button.dataset.readAloudSpeed === speed ? "true" : "false",
+      );
+    });
+  }
+
+  function resetForSpeedChange() {
+    stopAnimation();
+    if (audio.src) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      audio.hidden = true;
+    }
+    timings = [];
+    spans = [];
+    document
+      .querySelectorAll(".bilingual-list .karaoke-word")
+      .forEach((span) => {
+        span.classList.remove("karaoke-active", "karaoke-done");
+      });
+    setStatus("");
+  }
+
+  function setSpeed(next) {
+    if (next !== "normal" && next !== "slow") {
+      return;
+    }
+    speed = next;
+    applySpeedState();
+    resetForSpeedChange();
+    try {
+      window.localStorage.setItem(SPEED_KEY, speed);
+    } catch (_error) {
+      // Ignore storage errors.
     }
   }
 
@@ -115,11 +165,17 @@
     }
 
     button.disabled = true;
-    setStatus("正在生成全文朗读…", "loading");
+    speedButtons.forEach((speedButton) => {
+      speedButton.disabled = true;
+    });
+    setStatus(`正在生成${speedLabel(speed)}全文朗读…`, "loading");
 
     try {
+      const formData = new FormData();
+      formData.append("speed", speed);
       const response = await fetch(url, {
         method: "POST",
+        body: formData,
         credentials: "same-origin",
         headers: { "X-CSRFToken": csrfToken },
       });
@@ -177,8 +233,27 @@
       setStatus(error.message || "全文朗读生成失败，请重试。", "error");
     } finally {
       button.disabled = false;
+      speedButtons.forEach((speedButton) => {
+        speedButton.disabled = false;
+      });
     }
   }
+
+  try {
+    const stored = window.localStorage.getItem(SPEED_KEY);
+    if (stored === "normal" || stored === "slow") {
+      speed = stored;
+    }
+  } catch (_error) {
+    // Use the default normal speed.
+  }
+  applySpeedState();
+
+  speedButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setSpeed(button.dataset.readAloudSpeed);
+    });
+  });
 
   button.addEventListener("click", () => {
     void loadAndPlay();

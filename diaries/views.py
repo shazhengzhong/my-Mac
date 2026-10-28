@@ -341,6 +341,12 @@ def diary_translate(request, diary_id):
 def diary_read_aloud(request, diary_id):
     diary = _owned_diary(request, diary_id)
     version = diary.current_version
+    speed = request.POST.get("speed", DiaryReadAloud.Speed.NORMAL)
+    if speed not in DiaryReadAloud.Speed.values:
+        return JsonResponse(
+            {"ok": False, "error": "未知的朗读速度。"},
+            status=400,
+        )
     if version is None:
         return JsonResponse({"ok": False, "error": "这篇日记还没有英文。"}, status=400)
     sentences = list(version.sentences.order_by("ordinal"))
@@ -351,7 +357,11 @@ def diary_read_aloud(request, diary_id):
         )
 
     existing = (
-        DiaryReadAloud.objects.filter(owner=request.user, version=version)
+        DiaryReadAloud.objects.filter(
+            owner=request.user,
+            version=version,
+            speed=speed,
+        )
         .select_related("audio")
         .first()
     )
@@ -364,6 +374,7 @@ def diary_read_aloud(request, diary_id):
                 ),
                 "duration_ms": existing.audio.duration_ms,
                 "timings": existing.timings,
+                "speed": existing.speed,
                 "cached": True,
             }
         )
@@ -378,13 +389,14 @@ def diary_read_aloud(request, diary_id):
         consume_tts_quota(request.user, len(full_text))
         result = provider.synthesize(
             full_text,
-            speed="normal",
+            speed=speed,
             style="natural",
             enable_subtitles=True,
         )
         read_aloud = create_diary_read_aloud(
             owner=request.user,
             version=version,
+            speed=speed,
             sentence=sentences[0],
             result=result,
             timings=result.timings,
@@ -408,6 +420,7 @@ def diary_read_aloud(request, diary_id):
             ),
             "duration_ms": result.duration_ms,
             "timings": list(result.timings),
+            "speed": read_aloud.speed,
             "cached": False,
         }
     )

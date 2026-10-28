@@ -1000,10 +1000,12 @@ class ReadAloudFlowTests(AudioTestBase):
         payload = response.json()
         self.assertTrue(payload["ok"])
         self.assertFalse(payload["cached"])
+        self.assertEqual(payload["speed"], "normal")
         self.assertTrue(payload["timings"])
         self.assertIn("/diaries/audio/", payload["audio_url"])
 
         read = DiaryReadAloud.objects.get(owner=self.owner, version=version)
+        self.assertEqual(read.speed, "normal")
         self.assertEqual(read.audio.purpose, AudioAsset.Purpose.DIARY_TTS)
         self.assertTrue(read.timings)
         path = Path(self.media_dir.name) / read.audio.relative_path
@@ -1024,6 +1026,38 @@ class ReadAloudFlowTests(AudioTestBase):
         self.assertEqual(DiaryReadAloud.objects.count(), 1)
         counter.refresh_from_db()
         self.assertEqual(counter.request_count, 1)
+
+    def test_normal_and_slow_are_cached_separately(self):
+        diary, _version = self._make_aligned_diary()
+        url = reverse("diary_read_aloud", args=[diary.id])
+
+        normal = self.client.post(url, {"speed": "normal"})
+        slow = self.client.post(url, {"speed": "slow"})
+        self.assertEqual(normal.status_code, 200)
+        self.assertEqual(slow.status_code, 200)
+        self.assertNotEqual(
+            normal.json()["audio_url"], slow.json()["audio_url"]
+        )
+        self.assertEqual(DiaryReadAloud.objects.count(), 2)
+        self.assertEqual(
+            set(DiaryReadAloud.objects.values_list("speed", flat=True)),
+            {"normal", "slow"},
+        )
+
+        again = self.client.post(url, {"speed": "normal"})
+        self.assertTrue(again.json()["cached"])
+        self.assertEqual(DiaryReadAloud.objects.count(), 2)
+        counter = UsageCounter.objects.get(user=self.owner, feature="tts")
+        self.assertEqual(counter.request_count, 2)
+
+    def test_invalid_read_aloud_speed_is_rejected(self):
+        diary, _version = self._make_aligned_diary()
+        response = self.client.post(
+            reverse("diary_read_aloud", args=[diary.id]),
+            {"speed": "fast"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(DiaryReadAloud.objects.exists())
 
     def test_cross_user_and_anonymous_cannot_generate_read_aloud(self):
         other = make_diary(self.member)
@@ -1060,6 +1094,8 @@ class ReadAloudFlowTests(AudioTestBase):
         diary, _version = self._make_aligned_diary()
         response = self.client.get(reverse("diary_detail", args=[diary.id]))
         self.assertContains(response, "data-read-aloud")
+        self.assertContains(response, 'data-read-aloud-speed="normal"')
+        self.assertContains(response, 'data-read-aloud-speed="slow"')
         self.assertContains(response, "karaoke-word")
         self.assertContains(response, "全文朗读")
 

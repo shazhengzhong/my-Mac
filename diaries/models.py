@@ -301,16 +301,25 @@ class WordTtsRender(models.Model):
 
 
 class DiaryReadAloud(models.Model):
+    class Speed(models.TextChoices):
+        NORMAL = "normal", "正常"
+        SLOW = "slow", "慢速"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="diary_read_alouds",
     )
-    version = models.OneToOneField(
+    version = models.ForeignKey(
         EnglishVersion,
         on_delete=models.CASCADE,
-        related_name="read_aloud",
+        related_name="read_alouds",
+    )
+    speed = models.CharField(
+        max_length=10,
+        choices=Speed.choices,
+        default=Speed.NORMAL,
     )
     audio = models.OneToOneField(
         AudioAsset,
@@ -327,9 +336,18 @@ class DiaryReadAloud(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "speed"],
+                name="diaries_unique_version_read_aloud_speed",
+            )
+        ]
 
     def __str__(self) -> str:
-        return f"全文朗读 v{self.version.version_no} {self.id}"
+        return (
+            f"全文朗读 v{self.version.version_no} "
+            f"{self.speed} {self.id}"
+        )
 
 
 class PronunciationAttempt(models.Model):
