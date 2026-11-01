@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}删除日记 · 英语口语练习{% endblock %}
+{% block content %}
+  <section class="card narrow">
+    <p class="eyebrow">谨慎操作</p>
+    <h1>删除这篇日记？</h1>
+    <p class="lead">《{{ diary.display_title }}》的中文、英文版本和音标都会被删除，无法撤销。</p>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="actions">
+        <button class="button danger" type="submit">确认删除</button>
+        <a class="link" href="{% url 'diary_detail' diary.id %}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ diary.display_title }} · 英语口语练习{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">{{ diary.entry_date|date:"Y年n月j日" }}</p>
+      <h1>{{ diary.display_title }}</h1>
+    </div>
+    <div class="actions">
+      <div class="view-toggle" role="group" aria-label="阅读显示模式">
+        <button class="view-toggle-button" type="button" data-view-mode="both" aria-pressed="true">双语</button>
+        <button class="view-toggle-button" type="button" data-view-mode="zh" aria-pressed="false">只中文</button>
+        <button class="view-toggle-button" type="button" data-view-mode="en" aria-pressed="false">只英文</button>
+      </div>
+      <a class="button secondary" href="{% url 'diary_edit' diary.id %}">编辑中文</a>
+      <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">编辑英文</a>
+      <a class="link danger-link" href="{% url 'diary_delete' diary.id %}">删除</a>
+    </div>
+  </div>
+
+  {% if current and current.source == "ocr" %}
+    <div class="notice">
+      这是拍照识别生成的练习页；原照片没有作为附件保存。OCR 可能有错，可在「编辑英文」里修改。
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <div class="heading-row">
+      <div>
+        <h2>{% if has_aligned_chinese %}日记对照{% else %}中文日记{% endif %}</h2>
+        {% if has_aligned_chinese %}
+          <p class="muted small">可用右上角切换：双语 / 只中文 / 只英文；点击句子方框打开练习。</p>
+        {% endif %}
+      </div>
+      {% if translation.ready %}
+        <form method="post" action="{% url 'diary_translate' diary.id %}">
+          {% csrf_token %}
+          <button class="button secondary diary-translate-button" type="submit">{% if current %}重新翻译{% else %}生成英文翻译{% endif %}</button>
+        </form>
+      {% endif %}
+    </div>
+
+    {% if current and current.is_stale %}
+      <div class="notice warning">
+        中文日记在生成这版英文后又修改过。请重新翻译，或手动编辑英文后再练习。
+      </div>
+    {% endif %}
+
+    {% if current and has_aligned_chinese %}
+      <div
+        class="read-aloud-control en-only"
+        data-read-aloud
+        data-url="{% url 'diary_read_aloud' diary.id %}"
+      >
+        <span class="muted small">速度</span>
+        <div class="view-toggle" role="group" aria-label="朗读速度">
+          <button class="view-toggle-button" type="button" data-read-aloud-speed="normal" aria-pressed="true">正常</button>
+          <button class="view-toggle-button" type="button" data-read-aloud-speed="slow" aria-pressed="false">慢速</button>
+        </div>
+        <button type="button" class="button" data-read-aloud-button>全文朗读</button>
+        <span class="read-aloud-status" role="status" aria-live="polite"></span>
+        <audio class="read-aloud-audio" controls preload="none" hidden></audio>
+      </div>
+    {% endif %}
+
+    {% if has_aligned_chinese %}
+      <div class="bilingual-list">
+        {% for group in bilingual_groups %}
+          <div class="bilingual-group{% if group.sentences %} is-linked{% endif %}">
+            {% if group.sentences %}
+              <a
+                class="bilingual-group-link en-only"
+                href="#sentence-{{ group.sentences.0.id }}"
+                data-practice-target="sentence-{{ group.sentences.0.id }}"
+                title="打开这一句的练习"
+                aria-label="打开这一句的练习"
+                aria-haspopup="dialog"
+              >
+                {% for sentence in group.sentences %}
+                  <p class="bilingual-en karaoke-line" lang="en">
+                    {% for word in sentence.karaoke_words %}<span class="karaoke-word">{{ word }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
+                  </p>
+                {% endfor %}
+              </a>
+              <div class="bilingual-zh-row">
+                <a
+                  class="bilingual-group-link bilingual-zh-link zh-only"
+                  href="#sentence-{{ group.sentences.0.id }}"
+                  data-practice-target="sentence-{{ group.sentences.0.id }}"
+                  title="打开这一句的练习"
+                  aria-label="打开这一句的练习"
+                  aria-haspopup="dialog"
+                >
+                  <p class="bilingual-zh">{{ group.chinese_text }}</p>
+                </a>
+                <div
+                  class="diary-read-controls"
+                  data-diary-read-control
+                  data-sentence-id="{{ group.sentences.0.id }}"
+                  data-normal-url="{% url 'sentence_tts' group.sentences.0.id 'normal' %}"
+                  data-slow-url="{% url 'sentence_tts' group.sentences.0.id 'normal' %}"
+                  data-slow-playback-rate="0.8"
+                >
+                  <button class="diary-read-button" type="button" data-diary-read-speed="normal" aria-label="正常朗读这一句">正常</button>
+                  <button class="diary-read-button" type="button" data-diary-read-speed="slow" aria-label="慢速朗读这一句">慢读</button>
+                  <span class="diary-read-status" role="status" aria-live="polite"></span>
+                </div>
+              </div>
+            {% else %}
+              <div class="bilingual-group-link">
+                {% for sentence in group.sentences %}
+                  <p class="bilingual-en karaoke-line" lang="en">
+                    {% for word in sentence.karaoke_words %}<span class="karaoke-word">{{ word }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
+                  </p>
+                {% endfor %}
+                <p class="bilingual-zh">{{ group.chinese_text }}</p>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="notice">
+        {% if current %}
+          当前版本还没有中英文句子对照。点“重新翻译”可生成对照；旧版本会保留。
+        {% else %}
+          这篇日记还没有英文翻译。生成英文后会在这里显示中英文对照。
+        {% endif %}
+      </div>
+      <div class="diary-text zh-only">{{ diary.chinese_text|linebreaksbr }}</div>
+    {% endif %}
+  </section>
+
+  <div class="practice-modal" data-practice-modal hidden>
+    <div class="practice-modal-backdrop" data-practice-close></div>
+    <div
+      class="practice-modal-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="练习区"
+    >
+      <div class="practice-modal-bar">
+        <span class="practice-modal-title">练习区</span>
+        <button
+          class="practice-modal-close"
+          type="button"
+          data-practice-close
+          aria-label="关闭练习"
+        >×</button>
+      </div>
+      <div class="practice-modal-scroll" data-practice-scroll>
+  <section class="card practice-section" id="practice-section">
+    <div class="heading-row">
+      <div>
+        <h2>英文与音标</h2>
+        {% if current %}
+          <p class="muted">第 {{ current.version_no }} 版 · {{ current.get_source_display }}{% if current.provider_model %} · {{ current.provider_model }}{% endif %}</p>
+        {% endif %}
+      </div>
+      {% if current %}
+        <span class="badge">{{ current.get_source_display }}</span>
+      {% endif %}
+    </div>
+
+    {% if current %}
+      {% if translation.is_mock %}
+        <div class="notice">
+          当前为<strong>模拟翻译模式</strong>：英文是固定的测试内容，不会调用 DeepSeek，也不会产生费用。
+        </div>
+      {% elif not translation.ready %}
+        <div class="notice warning">{{ translation.message }}</div>
+      {% endif %}
+
+      <div class="actions">
+        {% if translation.ready %}
+          <form method="post" action="{% url 'diary_translate' diary.id %}">
+            {% csrf_token %}
+            <button class="button secondary" type="submit">重新翻译</button>
+          </form>
+        {% endif %}
+        <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">手动修改英文</a>
+      </div>
+
+      {% if tts.is_mock %}
+        <div class="notice">
+          当前<strong>示范朗读是模拟提示音</strong>，不是真人语音，也不会产生费用。真实情感人声需要后续接入。
+        </div>
+      {% elif not tts.ready %}
+        <div class="notice warning">{{ tts.message }}</div>
+      {% endif %}
+
+      {% if assessment.is_mock %}
+        <div class="notice">
+          当前<strong>单词测评是模拟模式</strong>：会返回固定分数，不联网、不产生费用。点击单词旁的麦克风图标，读 3 秒即可。
+        </div>
+      {% elif not assessment.ready %}
+        <div class="notice warning">{{ assessment.message }}</div>
+      {% else %}
+        <div class="notice">
+          点击单词旁的麦克风图标，朗读 3 秒后会显示准确度和综合得分。每次会消耗一次腾讯云调用。
+        </div>
+      {% endif %}
+
+      <ol class="sentence-list">
+        {% for sentence in sentences %}
+          <li class="sentence-card" id="sentence-{{ sentence.id }}">
+            <div class="sentence-header">
+              <span class="sentence-number">第 {{ forloop.counter }} 句</span>
+              <a class="small-link" href="{% url 'edit_sentence_ipa' sentence.id %}">校对音标</a>
+            </div>
+
+            <div class="word-line" aria-label="第 {{ forloop.counter }} 句的单词和{{ accent_label }}音标">
+              {% for segment in sentence.display_segments %}
+                {% if segment.token %}
+                  <span class="word-unit" data-word-unit>
+                    {% if tts.ready %}
+                      <button
+                        class="word-token word-play"
+                        type="button"
+                        lang="en"
+                        data-word-play
+                        data-word-play-url="{% url 'word_tts' segment.token.id %}"
+                        aria-label="播放 {{ segment.token.surface }} 的发音"
+                        title="播放 {{ segment.token.surface }} 的发音"
+                      >{{ segment.display_word }}</button>
+                    {% else %}
+                      <span class="word-token" lang="en">{{ segment.display_word }}</span>
+                    {% endif %}
+                    <span class="word-meta">
+                      {% if segment.token.display_ipa %}
+                        <span class="word-ipa" lang="en">/{{ segment.token.display_ipa }}/</span>
+                      {% else %}
+                        <span class="word-ipa unknown" title="{{ accent_label }}音未收录">—</span>
+                      {% endif %}
+                      {% if assessment.ready %}
+                        <button
+                          class="word-assess-button"
+                          type="button"
+                          data-assess-button
+                          data-assess-url="{% url 'assess_word' segment.token.id %}"
+                          data-word="{{ segment.token.surface }}"
+                          aria-label="测评 {{ segment.token.surface }}"
+                          title="测评 {{ segment.token.surface }}"
+                        >
+                          <svg class="icon icon-mic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"></rect>
+                            <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                          </svg>
+                          <span class="button-label sr-only">测评</span>
+                        </button>
+                      {% endif %}
+                    </span>
+                    {% if tts.ready %}
+                      <span class="word-play-status sr-only" role="status" aria-live="polite"></span>
+                    {% endif %}
+                    {% if assessment.ready %}
+                      <span class="assess-result" role="status" aria-live="polite">
+                        {% if segment.token.latest_assessment %}
+                          <span class="sr-only">准确度 </span>{{ segment.token.latest_assessment.accuracy|floatformat:0 }}{% if segment.token.latest_assessment.overall_score is not None %} · {{ segment.token.latest_assessment.overall_score|floatformat:0 }}{% endif %}
+                        {% endif %}
+                      </span>
+                    {% endif %}
+                  </span>
+                {% else %}
+                  <span class="word-static" lang="en">{{ segment.display_word }}</span>
+                {% endif %}
+              {% empty %}
+                <span class="word-static" lang="en">{{ sentence.text }}</span>
+              {% endfor %}
+            </div>
+
+            {% if sentence.chinese_text %}
+              <p class="practice-translation zh-only">{{ sentence.chinese_text }}</p>
+            {% endif %}
+
+            <div class="sentence-actions">
+              {% if tts.ready %}
+                <button
+                  class="icon-button"
+                  type="button"
+                  data-sentence-audio
+                  data-tts-url="{% url 'sentence_tts' sentence.id 'normal' %}"
+                  data-playback-rate="1"
+                  aria-label="播放正常示范朗读"
+                  title="正常示范朗读"
+                >
+                  <svg class="icon icon-speaker" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"></path>
+                    <path d="M15.5 8.7a4.8 4.8 0 0 1 0 6.6M18.2 6a8.3 8.3 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+                <button
+                  class="icon-button"
+                  type="button"
+                  data-sentence-audio
+                  data-tts-url="{% url 'sentence_tts' sentence.id 'normal' %}"
+                  data-playback-rate="0.8"
+                  aria-label="播放慢速示范朗读"
+                  title="慢速示范朗读"
+                >
+                  <svg class="icon icon-speaker-slow" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M3 9v6h3.5l4.5 4V5L6.5 9H3z" fill="currentColor"></path>
+                    <path d="M13.5 8.5a4.5 4.5 0 0 1 0 6.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+                    <circle cx="18" cy="17" r="4" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+                    <path d="M18 15v2.2l1.4.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+                <span class="sentence-audio-status" role="status" aria-live="polite"></span>
+              {% endif %}
+
+              <div
+                class="record-control"
+                data-record-control
+                data-upload-url="{% url 'upload_recording' sentence.id %}"
+              >
+                <button
+                  class="icon-button js-record-button"
+                  type="button"
+                  aria-label="开始录音"
+                  title="我的录音"
+                >
+                  <svg class="icon icon-mic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"></rect>
+                    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                  </svg>
+                  <span class="button-label sr-only">我的录音</span>
+                </button>
+                <span class="record-status" role="status" aria-live="polite"></span>
+              </div>
+            </div>
+
+            {% if sentence.recordings.all %}
+              <details class="recording-history" data-recording-history>
+                <summary>
+                  我的录音
+                  <span data-recording-count>{{ sentence.recordings.count }}</span>
+                </summary>
+                <div class="recording-list">
+                  {% for recording in sentence.recordings.all %}
+                    <div class="recording-item" data-recording-item>
+                      <div class="recording-meta">
+                        <span class="muted small">{{ recording.created_at|date:"m-d H:i" }}</span>
+                        <button
+                          class="recording-delete"
+                          type="button"
+                          data-delete-recording
+                          data-delete-url="{% url 'delete_recording' recording.id %}"
+                          aria-label="删除这条录音"
+                          title="删除这条录音"
+                        >删除</button>
+                      </div>
+                      <audio controls preload="none" src="{% url 'serve_audio_asset' recording.audio_id %}"></audio>
+                    </div>
+                  {% endfor %}
+                </div>
+              </details>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+
+      <p class="muted small">
+        音标是单词级{{ accent_label }} IPA（宽式标准音），不代表真人语流中的全部连读或弱读。词典未收录的名字可以点“校对音标”手动填写。
+      </p>
+      {% if previous_count %}
+        <p class="muted small">另外保留了 {{ previous_count }} 个旧英文版本；当前页面显示最新版本。</p>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">
+        <p>这篇日记还没有英文。生成后可以逐句查看音标并练习。</p>
+        {% if translation.is_mock %}
+          <div class="notice">
+            当前为<strong>模拟翻译模式</strong>：会显示固定测试英文，不会调用 DeepSeek，也不会产生费用。
+          </div>
+        {% elif not translation.ready %}
+          <div class="notice warning">{{ translation.message }}</div>
+        {% endif %}
+        <div class="actions">
+          {% if translation.ready %}
+            <form method="post" action="{% url 'diary_translate' diary.id %}">
+              {% csrf_token %}
+              <button class="button" type="submit">生成英文翻译</button>
+            </form>
+          {% endif %}
+          <a class="button secondary" href="{% url 'diary_edit_english' diary.id %}">手动填写英文</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'js/word-assessor.js' %}?v=20261029b" defer></script>
+  <script src="{% static 'js/word-player.js' %}?v=20261029a" defer></script>
+  <script src="{% static 'js/sentence-audio.js' %}?v=20261029d" defer></script>
+  <script src="{% static 'js/read-aloud.js' %}?v=20261029b" defer></script>
+  <script src="{% static 'js/view-mode.js' %}" defer></script>
+  <script src="{% static 'js/diary-reader.js' %}?v=20261029c" defer></script>
+  <script src="{% static 'js/recording-delete.js' %}?v=20261101b" defer></script>
+  <script src="{% static 'js/practice-modal.js' %}?v=20261031f" defer></script>
+{% endblock %}

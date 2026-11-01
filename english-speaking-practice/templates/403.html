@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}没有权限 · 英语口语练习{% endblock %}
+{% block content %}
+  <section class="card narrow">
+    <p class="eyebrow">访问受限</p>
+    <h1>没有权限</h1>
+    <p class="lead">这个页面只允许家庭管理员访问，或者你没有权限查看这里的内容。</p>
+    <p><a class="button" href="{% url 'home' %}">返回首页</a></p>
+  </section>
+{% endblock %}

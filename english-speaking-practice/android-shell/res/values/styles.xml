@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#f6f8fc</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#f6f8fc</item>
+        <item name="android:navigationBarColor">#f6f8fc</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#2563eb</item>
+    </style>
+
+    <style name="CropTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#2563eb</item>
+    </style>
+</resources>

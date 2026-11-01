@@ -1,0 +1,96 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="口语练习">
+  <title>{% block title %}英语口语练习{% endblock %}</title>
+  <link rel="manifest" href="{% static 'manifest.webmanifest' %}?v=20261101c">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'icons/favicon-32.png' %}?v=20261101c">
+  <link rel="icon" type="image/png" sizes="16x16" href="{% static 'icons/favicon-16.png' %}?v=20261101c">
+  <link rel="apple-touch-icon" sizes="180x180" href="{% static 'icons/apple-touch-icon.png' %}?v=20261101c">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261101c">
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261101c">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="{% url 'home' %}?home=1">英语口语练习</a>
+      {% if user.is_authenticated %}
+        <nav class="site-nav" aria-label="主导航">
+          <a class="nav-link" href="{% url 'home' %}?home=1">首页</a>
+          <a class="nav-link" href="{% url 'diary_list' %}">我的日记</a>
+          <a class="nav-link" href="{% url 'word_lookup' %}">查词</a>
+          <a class="nav-link" href="{% url 'ocr_upload' %}">拍照识别</a>
+          <form class="accent-form" method="post" action="{% url 'set_accent' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ accent_next|default:request.get_full_path }}">
+            <details class="accent-menu" data-accent-menu>
+              <summary class="accent-trigger">
+                <span class="accent-label">发音</span>
+                <span class="accent-current">{{ user.get_accent_display }}</span>
+                <span class="accent-chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="accent-popover">
+                <button
+                  class="accent-option{% if user.accent == 'us' %} is-active{% endif %}"
+                  type="submit"
+                  name="accent"
+                  value="us"
+                  aria-pressed="{% if user.accent == 'us' %}true{% else %}false{% endif %}"
+                >美音</button>
+                <button
+                  class="accent-option{% if user.accent == 'uk' %} is-active{% endif %}"
+                  type="submit"
+                  name="accent"
+                  value="uk"
+                  aria-pressed="{% if user.accent == 'uk' %}true{% else %}false{% endif %}"
+                >英音</button>
+              </div>
+            </details>
+          </form>
+          {% if user.is_owner %}
+            <a class="nav-link" href="{% url 'create_invitation' %}">邀请家人</a>
+            <a class="nav-link" href="{% url 'members' %}">成员</a>
+          {% endif %}
+          <a class="nav-link" href="{% url 'account_settings' %}">账号</a>
+          <span class="nav-name">{{ user.display_name }}</span>
+          <form class="inline-form" method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="link-button" type="submit">退出</button>
+          </form>
+        </nav>
+      {% endif %}
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    {% if messages %}
+      <ul class="messages" aria-live="polite">
+        {% for message in messages %}
+          <li class="message {{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer wrap">
+    <p>仅家庭内部使用 · 整句录音仅本人可听 · 翻译会发送给 DeepSeek，发音合成发送给阿里云，单词测评和拍照识别发送给腾讯云</p>
+  </footer>
+  <script src="{% static 'js/recorder.js' %}?v=20261101c" defer></script>
+  <script src="{% static 'js/nav-active.js' %}?v=20261029a" defer></script>
+  <script src="{% static 'js/accent-menu.js' %}?v=20261029a" defer></script>
+  <script src="{% static 'js/pwa.js' %}?v=20261031a" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

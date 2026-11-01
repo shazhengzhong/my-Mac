@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}拍照识别 · 英语口语练习{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">从照片变成练习</p>
+      <h1>拍照识别</h1>
+      <p class="lead">拍一张英文或中文书页、练习纸、菜单，识别后校对文字，再生成中英文对照练习。</p>
+    </div>
+    <a class="button secondary" href="{% url 'diary_list' %}">返回日记</a>
+  </div>
+
+  {% if ocr.ready %}
+    <div class="notice">{{ ocr.message }}</div>
+  {% else %}
+    <div class="notice warning">{{ ocr.message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="notice warning" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="card">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="step" value="ocr">
+      <input type="hidden" name="crop_x" value="">
+      <input type="hidden" name="crop_y" value="">
+      <input type="hidden" name="crop_w" value="">
+      <input type="hidden" name="crop_h" value="">
+      <div class="field">
+        <label for="ocr-image">选择照片</label>
+        <input
+          id="ocr-image"
+          name="image"
+          type="file"
+          accept="image/*"
+          required
+        >
+        <p class="helptext">
+          支持 JPG、PNG、BMP、HEIC，原图最大 25MB。选择照片后会先进入裁剪页，裁剪并自动压缩后再识别。
+        </p>
+        <p class="helptext">
+          照片只用于本次识别，不会作为日记附件保存。
+        </p>
+        <p class="helptext" id="ocr-file-status" role="status" aria-live="polite"></p>
+      </div>
+      <div class="actions">
+        <button class="button" type="submit">识别文字</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>识别后的流程</h2>
+    <ol class="muted">
+      <li>先校对 OCR 识别出的文字，改掉错字和错标点。</li>
+      <li>英文内容可以逐句翻译成中文；中文内容可以逐句翻译成英文。</li>
+      <li>生成一篇只有你能看到的日记，打开后使用中英文对照、单词发音、录音测评和全文朗读。</li>
+    </ol>
+    <p class="muted small">每张照片算一次 OCR 调用；每天有次数上限。原照片不会作为日记附件保存。</p>
+  </section>
+
+  <div class="crop-modal" data-crop-modal hidden>
+    <div class="crop-panel" role="dialog" aria-modal="true" aria-label="裁剪照片">
+      <div class="crop-bar">
+        <span class="crop-title">裁剪照片</span>
+        <button
+          class="crop-close"
+          type="button"
+          data-crop-cancel
+          aria-label="取消裁剪"
+        >×</button>
+      </div>
+      <div class="crop-canvas-wrap" data-crop-canvas-wrap>
+        <canvas data-crop-canvas></canvas>
+      </div>
+      <p class="crop-hint">拖动方框四角或边缘，框住要识别的文字区域</p>
+      <div class="crop-actions">
+        <button class="button secondary" type="button" data-crop-cancel>取消</button>
+        <button class="button" type="button" data-crop-apply>完成</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'js/ocr-upload.js' %}?v=20261101c" defer></script>
+{% endblock %}

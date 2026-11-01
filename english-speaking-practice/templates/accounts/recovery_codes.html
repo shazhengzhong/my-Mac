@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}保存恢复码 · 英语口语练习{% endblock %}
+{% block content %}
+  <section class="card">
+    {% if new_account %}
+      <p class="eyebrow">账号创建成功</p>
+      <h1>保存你的恢复码</h1>
+      <p class="lead">欢迎加入，{{ user.display_name }}。这是找回密码的唯一备用凭证。</p>
+    {% else %}
+      <p class="eyebrow">安全设置</p>
+      <h1>新的恢复码</h1>
+      <p class="lead">旧恢复码已经全部失效。请保存下面这一组新码。</p>
+    {% endif %}
+
+    <div class="notice warning">
+      这些恢复码<strong>只显示这一次</strong>。每个码只能使用一次。请现在抄写或存入密码管理器。全部丢失后，账号无法通过应用找回。
+    </div>
+
+    <ul class="recovery-code-list">
+      {% for code in codes %}
+        <li><code>{{ code }}</code></li>
+      {% endfor %}
+    </ul>
+
+    <p class="muted">不要截图发到公开聊天、朋友圈或网盘。你可以使用浏览器打印功能保存纸质副本。</p>
+    <a class="button" href="{% url 'home' %}">我已保存，返回首页</a>
+  </section>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}家庭成员 · 英语口语练习{% endblock %}
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">家庭管理员</p>
+    <h1>家庭成员</h1>
+    <p class="lead">这里只显示名字和角色，不显示任何成员的日记、翻译、音标或录音。</p>
+
+    <ul class="member-list">
+      {% for member in members %}
+        <li>
+          <div>
+            <strong>{{ member.display_name }}</strong>
+            {% if member.role == "owner" %}
+              <span class="badge">管理员</span>
+            {% else %}
+              <span class="badge muted-badge">成员</span>
+            {% endif %}
+          </div>
+          <span class="muted">加入于 {{ member.date_joined|date:"Y-m-d" }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <div class="actions">
+      <a class="button secondary" href="{% url 'create_invitation' %}">邀请家人</a>
+      <a class="link" href="{% url 'home' %}">返回首页</a>
+    </div>
+  </section>
+{% endblock %}

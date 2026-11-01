@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}页面不存在 · 英语口语练习{% endblock %}
+{% block content %}
+  <section class="card narrow">
+    <p class="eyebrow">找不到页面</p>
+    <h1>页面不存在</h1>
+    <p class="lead">这个地址无效，或者内容不属于当前账号。</p>
+    <p><a class="button" href="{% url 'home' %}">返回首页</a></p>
+  </section>
+{% endblock %}

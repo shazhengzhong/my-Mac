@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}加入家庭 · 英语口语练习{% endblock %}
+{% block content %}
+  <section class="card narrow">
+    <p class="eyebrow">邀请制</p>
+    <h1>加入家庭</h1>
+    <p class="lead">请输入家庭管理员给你的邀请码。注册成功后，你会看到一组一次性恢复码，请马上保存。</p>
+
+    <div class="notice">
+      这里没有短信验证。手机号只是你的登录账号名，并且必须与管理员邀请时填写的一致。
+    </div>
+
+    <form method="post" action="{% url 'join' %}">
+      {% csrf_token %}
+      {% include "accounts/_form_fields.html" %}
+      <button class="button" type="submit">创建账号并加入</button>
+    </form>
+
+    <div class="secondary-links">
+      <span>已经有账号？</span>
+      <a href="{% url 'login' %}">去登录</a>
+    </div>
+  </section>
+{% endblock %}
