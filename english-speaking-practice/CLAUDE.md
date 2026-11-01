@@ -46,6 +46,23 @@ python manage.py test
 
 `README.md` 和 `FEATURE_LEDGER.md` 里仍有旧的火山引擎 / 拼读功能描述，部分内容已过时。以本文件、当前代码和 `.env` 配置为准；不要只根据旧 README 推断现状。
 
+## GitHub 备份
+
+- GitHub 仓库：`https://github.com/shazhengzhong/my-Mac`
+- 这个仓库**根目录是另一个项目**（物流打印软件）；英语项目只放在子目录：
+  `english-speaking-practice/`
+- 本地镜像：`~/my-Mac`（不是主要开发目录；主要开发目录仍是本项目文件夹）
+- 同步脚本：`scripts/sync_github.sh`
+- 用户选择的是「任务完成后提交」，不装后台定时器。**完成一个代码改动并验证通过后**，运行：
+  ```bash
+  ./scripts/sync_github.sh "说明这次改了什么"
+  ```
+- 脚本会先拉取远端、同步到镜像子目录、检查敏感/超大文件，再提交并推送。
+- 不要用 `git push` 从本项目根目录直接推；它没有配置 remote。
+- 不要覆盖或强推 `my-Mac` 的 `main`；仓库根目录的物流项目必须保留。
+- 该仓库是公开仓库。`.env`、数据库、家庭录音、签名文件、Android 工具链、APK、测试音频都不能进入仓库；不要削弱 `scripts/sync_github.sh` 和 `.gitignore` 的排除规则。
+- 纯问答、讨论和预览不提交；只有代码/资源改动并验证通过后才同步。
+
 ## 工作约定
 
 1. **先理解需求，再改代码。** 用户明确要求先讨论时，先给方案和影响范围，得到确认后才执行。
