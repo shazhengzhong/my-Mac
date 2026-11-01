@@ -7,8 +7,9 @@ from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
@@ -63,7 +64,10 @@ def home(request):
     return render(
         request,
         "accounts/home.html",
-        {"active_recovery_codes": active_codes, "diary_count": diary_count},
+        {
+            "active_recovery_codes": active_codes,
+            "diary_count": diary_count,
+        },
     )
 
 
@@ -79,6 +83,28 @@ def account_settings(request):
             "masked_phone": mask_phone(request.user.phone),
         },
     )
+
+
+@login_required
+@require_POST
+@never_cache
+def set_accent(request):
+    accent = (request.POST.get("accent") or "").strip()
+    if accent not in User.Accent.values:
+        messages.error(request, "未识别的发音选项。")
+        return redirect("home")
+
+    request.user.accent = accent
+    request.user.save(update_fields=["accent"])
+
+    next_url = request.POST.get("next") or ""
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse("home")
+    return redirect(next_url)
 
 
 @login_required

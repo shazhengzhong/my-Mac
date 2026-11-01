@@ -7,7 +7,7 @@ from typing import Protocol
 import httpx
 from django.conf import settings
 
-from services.text import split_chinese_sentences
+from services.text import split_chinese_sentences, split_english_sentences
 
 MOCK_TRANSLATION = (
     "Today I wrote a short diary in Chinese.\n"
@@ -47,6 +47,15 @@ WORD_SYSTEM_PROMPT = (
     "or commentary. Do not use markdown or code fences."
 )
 
+ENGLISH_PAIR_SYSTEM_PROMPT = (
+    "You translate private English diary or book-page text into natural, concise "
+    "Simplified Chinese. The user sends a JSON array of English sentences. Return only "
+    'a JSON object of the form {"translations": ["...", "..."]} with exactly one '
+    "Chinese translation per input sentence, in the same order. Keep names, dates, and "
+    "the writer's tone. Do not add facts, explanations, or commentary. Do not use "
+    "markdown or code fences."
+)
+
 
 class TranslationError(Exception):
     """A user-safe translation failure; never include secrets or diary content."""
@@ -72,6 +81,8 @@ class Translator(Protocol):
 
     def translate_pairs(self, chinese_text: str) -> list[TranslationPair]: ...
 
+    def translate_english_pairs(self, english_text: str) -> list[TranslationPair]: ...
+
     def translate_word(self, word: str) -> WordTranslation: ...
 
 
@@ -88,6 +99,18 @@ class MockTranslator:
         return [
             TranslationPair(chinese=chinese, english=english)
             for chinese, english in MOCK_PAIRS
+        ]
+
+    def translate_english_pairs(self, english_text: str) -> list[TranslationPair]:
+        sentences = split_english_sentences(english_text)
+        if not sentences:
+            raise TranslationError("英文内容为空，无法翻译。")
+        return [
+            TranslationPair(
+                chinese=f"（模拟翻译）{sentence}",
+                english=sentence,
+            )
+            for sentence in sentences
         ]
 
     def translate_word(self, word: str) -> WordTranslation:
@@ -136,12 +159,18 @@ class DeepSeekTranslator:
         self.model = model
         self._client = client
 
-    def _post(self, client: httpx.Client, messages: list[dict]) -> str:
+    def _post(
+        self,
+        client: httpx.Client,
+        messages: list[dict],
+        *,
+        max_tokens: int = 2048,
+    ) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
-            "max_tokens": 2048,
+            "max_tokens": max_tokens,
             "stream": False,
         }
         try:
@@ -169,7 +198,7 @@ class DeepSeekTranslator:
             raise TranslationError("翻译服务返回了无法识别的内容，请稍后再试。") from exc
 
         if not isinstance(content, str) or not content.strip():
-            raise TranslationError("翻译服务没有返回英文内容，请稍后再试。")
+            raise TranslationError("翻译服务没有返回可用内容，请稍后再试。")
 
         cleaned = content.strip()
         if cleaned.startswith("```") and cleaned.endswith("```"):
@@ -227,6 +256,42 @@ class DeepSeekTranslator:
             )
         return pairs
 
+    def _request_english_pairs(
+        self, client: httpx.Client, english_text: str
+    ) -> list[TranslationPair]:
+        sentences = split_english_sentences(english_text)
+        if not sentences:
+            raise TranslationError("英文内容为空，无法翻译。")
+
+        content = self._post(
+            client,
+            [
+                {"role": "system", "content": ENGLISH_PAIR_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": json.dumps(sentences, ensure_ascii=False),
+                },
+            ],
+            max_tokens=4096,
+        )
+        parsed = _parse_json_payload(content)
+        translations = (
+            parsed.get("translations") if isinstance(parsed, dict) else parsed
+        )
+        if not isinstance(translations, list) or len(translations) != len(sentences):
+            raise TranslationError("翻译结果与英文句子数量不一致，请重试。")
+
+        pairs: list[TranslationPair] = []
+        for english, item in zip(sentences, translations):
+            if isinstance(item, dict):
+                item = item.get("chinese") or item.get("translation") or ""
+            if not isinstance(item, str) or not item.strip():
+                raise TranslationError("翻译服务没有返回完整的中文内容，请重试。")
+            pairs.append(
+                TranslationPair(chinese=item.strip(), english=english)
+            )
+        return pairs
+
     def translate(self, chinese_text: str) -> str:
         if self._client is not None:
             return self._request(self._client, chinese_text)
@@ -242,6 +307,17 @@ class DeepSeekTranslator:
         try:
             with httpx.Client(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
                 return self._request_pairs(client, chinese_text)
+        except httpx.HTTPError as exc:
+            raise TranslationError("暂时无法连接翻译服务，请检查网络后再试。") from exc
+
+    def translate_english_pairs(
+        self, english_text: str
+    ) -> list[TranslationPair]:
+        if self._client is not None:
+            return self._request_english_pairs(self._client, english_text)
+        try:
+            with httpx.Client(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
+                return self._request_english_pairs(client, english_text)
         except httpx.HTTPError as exc:
             raise TranslationError("暂时无法连接翻译服务，请检查网络后再试。") from exc
 

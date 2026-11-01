@@ -21,6 +21,7 @@
   let timings = [];
   let spans = [];
   let animation = null;
+  let durationMs = 0;
 
   function getCookie(name) {
     const encoded = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -35,6 +36,91 @@
     } else {
       delete status.dataset.kind;
     }
+  }
+
+
+  function normalizeWord(value) {
+    return (value || "")
+      .toLowerCase()
+      .replace(/[’]/g, "'")
+      .replace(/[^a-z0-9']/g, "");
+  }
+
+  function alignTimings(rawTimings, textSpans) {
+    if (
+      !Array.isArray(rawTimings) ||
+      rawTimings.length === 0 ||
+      textSpans.length === 0
+    ) {
+      return [];
+    }
+
+    const aligned = [];
+    let timingIndex = 0;
+    for (let spanIndex = 0; spanIndex < textSpans.length; spanIndex += 1) {
+      const target = normalizeWord(textSpans[spanIndex].textContent);
+      if (!target) {
+        const previous = aligned[aligned.length - 1];
+        const edge = previous ? previous.end_ms : 0;
+        aligned.push({ start_ms: edge, end_ms: edge });
+        continue;
+      }
+
+      let joined = "";
+      let start = null;
+      let end = null;
+      let consumed = 0;
+      while (timingIndex + consumed < rawTimings.length) {
+        const item = rawTimings[timingIndex + consumed];
+        const word = normalizeWord(item && item.word);
+        if (word) {
+          const itemStart = Number(item.start_ms);
+          const itemEnd = Number(item.end_ms);
+          if (Number.isFinite(itemStart) && Number.isFinite(itemEnd)) {
+            if (start === null) {
+              start = itemStart;
+            }
+            end = itemEnd;
+            joined += word;
+          }
+        }
+        consumed += 1;
+        if (joined === target) {
+          break;
+        }
+        if (!target.startsWith(joined)) {
+          break;
+        }
+      }
+
+      if (
+        start === null ||
+        end === null ||
+        !joined ||
+        (!joined.startsWith(target) && !target.startsWith(joined))
+      ) {
+        return [];
+      }
+      aligned.push({ start_ms: start, end_ms: end });
+      timingIndex += Math.max(1, consumed);
+    }
+
+    return aligned.length === textSpans.length ? aligned : [];
+  }
+
+  function approximateTimings(textSpans, totalMs) {
+    const weights = textSpans.map((span) => {
+      const normalized = normalizeWord(span.textContent);
+      return Math.max(1, normalized.length);
+    });
+    const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+    const duration = Math.max(1, Number(totalMs) || 3000);
+    let cursor = 0;
+    return weights.map((weight) => {
+      const start = cursor;
+      cursor += (duration * weight) / total;
+      return { start_ms: start, end_ms: cursor };
+    });
   }
 
   function collectSpans() {
@@ -52,6 +138,11 @@
 
   function speedLabel(value) {
     return value === "slow" ? "慢速" : "正常";
+  }
+
+  function applyPlaybackRate() {
+    audio.preservesPitch = true;
+    audio.playbackRate = speed === "slow" ? 0.8 : 1;
   }
 
   function applySpeedState() {
@@ -148,6 +239,7 @@
 
   async function loadAndPlay() {
     if (audio.src && timings.length) {
+      applyPlaybackRate();
       audio.currentTime = 0;
       updateHighlight();
       try {
@@ -171,8 +263,9 @@
     setStatus(`正在生成${speedLabel(speed)}全文朗读…`, "loading");
 
     try {
+      const requestSpeed = speed === "slow" ? "normal" : speed;
       const formData = new FormData();
-      formData.append("speed", speed);
+      formData.append("speed", requestSpeed);
       const response = await fetch(url, {
         method: "POST",
         body: formData,
@@ -204,23 +297,21 @@
         throw new Error("全文朗读没有成功，请刷新页面后重试。");
       }
 
-      timings = Array.isArray(payload.timings) ? payload.timings : [];
       collectSpans();
+      durationMs = Number(payload.duration_ms) || 0;
+      timings = alignTimings(
+        Array.isArray(payload.timings) ? payload.timings : [],
+        spans,
+      );
+      if (timings.length !== spans.length) {
+        timings = approximateTimings(spans, durationMs);
+      }
+      setStatus("");
+
       audio.src = payload.audio_url;
       audio.hidden = false;
       audio.load();
-
-      if (!timings.length) {
-        setStatus("没有拿到字幕时间轴，暂时只播放音频。", "warning");
-      } else if (timings.length !== spans.length) {
-        setStatus(
-          `字幕时间轴与页面文字不一致（${timings.length} / ${spans.length}），暂时只播放音频。`,
-          "warning",
-        );
-        timings = [];
-      } else {
-        setStatus("");
-      }
+      applyPlaybackRate();
 
       audio.currentTime = 0;
       updateHighlight();

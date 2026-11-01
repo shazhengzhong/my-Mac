@@ -207,14 +207,28 @@ class TencentSOEAssessor:
     @staticmethod
     def _error_message(code: Any, message: str) -> str:
         text = (message or "").lower()
-        if code in {4001, 4002, 4003, 4004, 4005} or "signature" in text or "auth" in text:
+        if code == 4004 or any(
+            token in text
+            for token in (
+                "资源包",
+                "后付费",
+                "欠费",
+                "余额",
+                "quota",
+                "exhaust",
+                "resource package",
+                "recharge",
+            )
+        ):
+            return "腾讯云评测额度不足，请购买资源包或开通后付费。"
+        if code in {4001, 4002, 4003, 4005} or "signature" in text or "auth" in text:
             return "腾讯云鉴权失败，请检查 SecretId、SecretKey 和 AppID。"
         if code == 4103 or "oov" in text or "not in" in text:
             return "这个词不在评测词典里，暂时无法测评。"
         if code == 4115 or ("engine" in text and "match" in text):
             return "评测引擎不匹配，请检查英文引擎配置。"
-        if "quota" in text or "limit" in text or "frequency" in text:
-            return "腾讯云评测额度不足或请求过于频繁。"
+        if "limit" in text or "frequency" in text:
+            return "腾讯云评测请求过于频繁，请稍后再试。"
         if "audio" in text or "format" in text:
             return "音频格式不符合评测要求。"
         return "单词测评失败，请稍后再试。"

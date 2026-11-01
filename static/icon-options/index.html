@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#2563eb">
+  <title>图标方案 · 英语口语练习</title>
+  <style>
+    :root {
+      --bg: #f6f8fc;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --accent-soft: #eff6ff;
+      --coral: #fb7185;
+      --coral-soft: #fff1f2;
+      --amber: #f59e0b;
+      --amber-soft: #fffbeb;
+      --mint: #10b981;
+      --mint-soft: #ecfdf5;
+      --violet: #8b5cf6;
+      --border: #e5eaf2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 8% -8%, rgba(37, 99, 235, .12), transparent 32rem),
+        radial-gradient(circle at 100% 2%, rgba(251, 113, 133, .09), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      line-height: 1.55;
+    }
+    .wrap { width: min(100% - 1.5rem, 1120px); margin: 0 auto; padding: 2rem 0 3.5rem; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: .38rem;
+      margin: 0 0 .35rem; color: var(--accent-dark);
+      font-size: .72rem; font-weight: 800; letter-spacing: .1em;
+    }
+    .eyebrow::before { content: ""; width: .85rem; height: 2px; border-radius: 2px; background: currentColor; }
+    h1 { margin: 0 0 .55rem; font-size: clamp(1.6rem, 4vw, 2.1rem); letter-spacing: -.02em; }
+    .intro { max-width: 58rem; margin: 0 0 1.1rem; color: var(--muted); font-size: .95rem; }
+    .tip {
+      display: inline-block; margin: 0 0 1.6rem; padding: .45rem .75rem;
+      border: 1px solid #dbeafe; border-radius: 8px;
+      background: var(--accent-soft); color: var(--accent-dark);
+      font-size: .86rem; font-weight: 650;
+    }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .wrap { width: min(100% - 1rem, 1120px); padding-top: 1.2rem; } }
+    .card {
+      position: relative; display: grid; grid-template-columns: 176px minmax(0, 1fr);
+      gap: 1rem; align-items: center; padding: 1rem;
+      border: 1px solid var(--border); border-top: 3px solid var(--accent);
+      border-radius: 14px; background: var(--surface);
+      box-shadow: 0 1px 2px rgba(16, 24, 40, .03), 0 10px 28px rgba(16, 24, 40, .05);
+    }
+    .card:nth-child(5n + 2) { border-top-color: var(--coral); }
+    .card:nth-child(5n + 3) { border-top-color: var(--amber); }
+    .card:nth-child(5n + 4) { border-top-color: var(--mint); }
+    .card:nth-child(5n + 5) { border-top-color: var(--violet); }
+    @media (max-width: 860px) { .card { grid-template-columns: 142px minmax(0, 1fr); gap: .8rem; } }
+    @media (max-width: 430px) { .card { grid-template-columns: 108px minmax(0, 1fr); padding: .8rem; } }
+    .icon-large {
+      display: block; width: 176px; height: 176px; border-radius: 40px; overflow: hidden;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .14);
+    }
+    .icon-large img { display: block; width: 100%; height: 100%; }
+    @media (max-width: 860px) { .icon-large { width: 142px; height: 142px; border-radius: 32px; } }
+    @media (max-width: 430px) { .icon-large { width: 108px; height: 108px; border-radius: 24px; } }
+    .number {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.35rem; height: 1.35rem; margin-bottom: .25rem; border-radius: 6px;
+      background: var(--accent-soft); color: var(--accent-dark);
+      font-size: .72rem; font-weight: 800;
+    }
+    h2 { margin: 0 0 .3rem; font-size: 1.1rem; line-height: 1.28; }
+    .desc { margin: 0 0 .6rem; color: var(--muted); font-size: .87rem; line-height: 1.5; }
+    .sizes { display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .72rem; }
+    .sizes img { width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 3px 8px rgba(15, 23, 42, .12); }
+    .sizes img.tiny { width: 28px; height: 28px; border-radius: 7px; }
+    .badge {
+      position: absolute; top: .7rem; right: .7rem; padding: .16rem .45rem;
+      border-radius: 6px; background: var(--accent); color: #fff;
+      font-size: .66rem; font-weight: 750;
+    }
+    .footer {
+      margin-top: 1.6rem; padding: .85rem 1rem; border-radius: 10px;
+      border: 1px solid #dbeafe; border-left: 3px solid var(--accent);
+      background: #f8fbff; color: var(--muted); font-size: .88rem;
+    }
+    .footer strong { color: var(--ink); }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <p class="eyebrow">ICON DIRECTIONS</p>
+    <h1>挑一个喜欢的图标</h1>
+    <p class="intro">
+      新配色改成干净的白底，用蓝色、珊瑚色、琥珀色和薄荷色做点缀，不再使用深青绿和米色底。
+      同时保留大图、桌面实际大小和小尺寸预览。
+    </p>
+    <p class="tip">回复编号即可，例如：选 07</p>
+
+    <section class="grid" aria-label="图标方案列表">
+
+      <article class="card">
+        <a class="icon-large" href="01-bubble-wave-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="01-bubble-wave-180.png?v=20261101b" alt="方案 01：气泡与声波">
+        </a>
+        <div>
+          <div class="number">01</div>
+          <h2>气泡 + 声波</h2>
+          <p class="desc">最稳妥：蓝色气泡一眼看出“说”和“声音”，白底更轻。</p>
+          <div class="sizes">
+            <img src="01-bubble-wave-64.png?v=20261101b" alt="">
+            <img class="tiny" src="01-bubble-wave-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <a class="icon-large" href="02-blue-mic-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="02-blue-mic-180.png?v=20261101b" alt="方案 02：蓝色麦克风">
+        </a>
+        <div>
+          <div class="number">02</div>
+          <h2>蓝色麦克风</h2>
+          <p class="desc">最直接：麦克风代表开口练习，彩色声波让画面不单调。</p>
+          <div class="sizes">
+            <img src="02-blue-mic-64.png?v=20261101b" alt="">
+            <img class="tiny" src="02-blue-mic-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <a class="icon-large" href="03-mic-bubble-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="03-mic-bubble-180.png?v=20261101b" alt="方案 03：麦克风气泡">
+        </a>
+        <div>
+          <div class="number">03</div>
+          <h2>麦克风气泡</h2>
+          <p class="desc">麦克风 + 对话气泡，功能感最强，也更像口语课。</p>
+          <div class="sizes">
+            <img src="03-mic-bubble-64.png?v=20261101b" alt="">
+            <img class="tiny" src="03-mic-bubble-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <a class="icon-large" href="04-letter-a-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="04-letter-a-180.png?v=20261101b" alt="方案 04：字母 A 与声波">
+        </a>
+        <div>
+          <div class="number">04</div>
+          <h2>字母 A + 声波</h2>
+          <p class="desc">一眼看出是英语；字母造型最简洁，适合小尺寸。</p>
+          <div class="sizes">
+            <img src="04-letter-a-64.png?v=20261101b" alt="">
+            <img class="tiny" src="04-letter-a-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <a class="icon-large" href="05-book-wave-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="05-book-wave-180.png?v=20261101b" alt="方案 05：书本与声波">
+        </a>
+        <div>
+          <div class="number">05</div>
+          <h2>书本 + 声波</h2>
+          <p class="desc">保留“日记”属性，同时用彩色声波强调朗读。</p>
+          <div class="sizes">
+            <img src="05-book-wave-64.png?v=20261101b" alt="">
+            <img class="tiny" src="05-book-wave-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <a class="icon-large" href="06-play-bubble-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="06-play-bubble-180.png?v=20261101b" alt="方案 06：播放键气泡">
+        </a>
+        <div>
+          <div class="number">06</div>
+          <h2>播放键气泡</h2>
+          <p class="desc">强调“听和跟读”，最接近学习类 App 的感觉。</p>
+          <div class="sizes">
+            <img src="06-play-bubble-64.png?v=20261101b" alt="">
+            <img class="tiny" src="06-play-bubble-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <a class="icon-large" href="07-round-bubble-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="07-round-bubble-180.png?v=20261101b" alt="方案 07：圆形声波气泡">
+        </a>
+        <div>
+          <div class="number">07</div>
+          <h2>圆形声波气泡</h2>
+          <p class="desc">最简洁、最像成品图标；浅色桌面和深色桌面都不抢眼。</p>
+          <div class="sizes">
+            <img src="07-round-bubble-64.png?v=20261101b" alt="">
+            <img class="tiny" src="07-round-bubble-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="badge">当前使用</span>
+        <a class="icon-large" href="08-dual-bubbles-512.png?v=20261101b" target="_blank" rel="noopener">
+          <img src="08-dual-bubbles-180.png?v=20261101b" alt="方案 08：双语气泡">
+        </a>
+        <div>
+          <div class="number">08</div>
+          <h2>双语气泡</h2>
+          <p class="desc">强调一家人对话练习，气质最温和，但信息量稍多。</p>
+          <div class="sizes">
+            <img src="08-dual-bubbles-64.png?v=20261101b" alt="">
+            <img class="tiny" src="08-dual-bubbles-64.png?v=20261101b" alt="">
+            <span>桌面实际大小</span>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <p class="footer">
+      <strong>怎么选：</strong>回复编号即可，例如“选 07”；也可以说“07 但想换颜色”。
+      选好后我会一次性生成 PWA、苹果主屏、网页图标和 Android APK 所需的全部尺寸。
+    </p>
+  </main>
+</body>
+</html>

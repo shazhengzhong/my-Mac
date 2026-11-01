@@ -75,16 +75,18 @@ class EnglishVersionForm(forms.Form):
 class IpaCorrectionForm(forms.Form):
     """Dynamically create one IPA input per token on a sentence."""
 
-    def __init__(self, *args, tokens=(), **kwargs):
+    def __init__(self, *args, tokens=(), accent="us", **kwargs):
         super().__init__(*args, **kwargs)
         self.tokens = list(tokens)
+        self.accent = accent if accent in {"us", "uk"} else "us"
         self.token_fields = []
         for token in self.tokens:
             field_name = f"ipa_{token.pk.hex}"
             self.token_fields.append((token, field_name))
+            initial = token.ipa_uk if self.accent == "uk" else token.ipa
             self.fields[field_name] = forms.CharField(
                 required=False,
-                initial=token.ipa,
+                initial=initial,
                 max_length=MAX_IPA_LENGTH,
                 label=token.surface,
                 widget=forms.TextInput(

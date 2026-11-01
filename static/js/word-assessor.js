@@ -10,11 +10,26 @@
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   let activeSession = null;
 
+  function unitFor(button) {
+    return button.closest("[data-word-unit], .word-chip");
+  }
+
+  function setButtonLabel(button, label) {
+    const labelSpan = button.querySelector(".button-label");
+    if (labelSpan) {
+      labelSpan.textContent = label;
+    } else {
+      button.textContent = label;
+    }
+    button.setAttribute("aria-label", label);
+  }
+
   function setResult(button, message, kind = "", audioUrl = "") {
-    const chip = button.closest(".word-chip");
+    const chip = unitFor(button);
     const result = chip ? chip.querySelector(".assess-result") : null;
     if (!result) return;
     result.textContent = message;
+    result.classList.add("is-visible");
     if (kind) {
       result.dataset.kind = kind;
     } else {
@@ -34,11 +49,13 @@
   function updateButtons() {
     buttons.forEach((button) => {
       if (activeSession && activeSession.button === button) {
-        button.textContent = activeSession.busy ? "评分中…" : "停止";
+        setButtonLabel(button, activeSession.busy ? "评分中…" : "停止");
         button.disabled = activeSession.busy;
+        button.classList.toggle("is-recording", !activeSession.busy);
       } else {
-        button.textContent = "测评";
+        setButtonLabel(button, "测评");
         button.disabled = Boolean(activeSession);
+        button.classList.remove("is-recording");
       }
     });
   }
@@ -188,7 +205,7 @@
       if (activeSession === session) {
         activeSession = null;
         updateButtons();
-        button.textContent = "重测";
+        setButtonLabel(button, "重测");
       }
     }
   }
@@ -290,7 +307,9 @@
 
     activeSession = session;
     try {
-      recorder.start(250);
+      // Safari 26 emits empty blobs for small timeslice values. Recording
+      // without a timeslice yields one complete blob when we call stop().
+      recorder.start();
     } catch (_error) {
       stopTracks(session);
       await closeContext(session);

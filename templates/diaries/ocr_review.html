@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}校对识别结果 · 英语口语练习{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">OCR 结果</p>
+      <h1>校对识别结果</h1>
+      <p class="lead">
+        {% if line_count %}识别出 {{ line_count }} 行文字。{% endif %}
+        先改掉识别错误，再生成中英文练习。
+      </p>
+    </div>
+    <a class="button secondary" href="{% url 'ocr_upload' %}">重新上传</a>
+  </div>
+
+  {% if error %}
+    <div class="notice warning" role="alert">{{ error }}</div>
+  {% endif %}
+  {% if translation.is_mock %}
+    <div class="notice">当前是模拟翻译模式，生成的中文仅用于界面测试，不联网、不产生费用。</div>
+  {% elif not translation.ready %}
+    <div class="notice warning">{{ translation.message }}</div>
+  {% endif %}
+
+  <section class="card">
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="step" value="create">
+      <div class="field">
+        <label for="ocr-title">标题（可选）</label>
+        <input
+          id="ocr-title"
+          name="title"
+          type="text"
+          value="{{ title }}"
+          maxlength="100"
+          placeholder="例如 拍照识别 2026-10-28"
+        >
+      </div>
+      <div class="field">
+        <label for="ocr-text">识别出的文字（可修改）</label>
+        <textarea
+          id="ocr-text"
+          name="source_text"
+          rows="14"
+          maxlength="5000"
+          spellcheck="false"
+          required
+        >{{ source_text }}</textarea>
+        <p class="helptext">
+          OCR 可能把字母、标点识别错。可以每句一行，也可以保留原来的段落。
+          英文照片选“翻译成中文”；中文照片选“翻译成英文”。
+        </p>
+      </div>
+      <div class="actions">
+        <button
+          class="button{% if direction == 'zh_to_en' %} secondary{% endif %}"
+          type="submit"
+          name="direction"
+          value="en_to_zh"
+        >翻译成中文并生成练习</button>
+        <button
+          class="button{% if direction != 'zh_to_en' %} secondary{% endif %}"
+          type="submit"
+          name="direction"
+          value="zh_to_en"
+        >翻译成英文并生成练习</button>
+        <a class="link" href="{% url 'ocr_upload' %}">重新上传</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>生成后</h2>
+    <p>
+      会创建一篇只有你能看到的「拍照识别」日记，并打开已有的中英文对照、单词发音、
+      录音测评和全文朗读。原照片不会作为附件保留。
+    </p>
+  </section>
+{% endblock %}

@@ -7,10 +7,12 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 import wave
 
 import httpx
+from PIL import Image
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -30,7 +32,23 @@ from services.audio import (
     parse_byte_range,
     validate_recording_wav,
 )
+from services.ocr import (
+    MOCK_OCR_TEXT,
+    MockOCRProvider,
+    OCRError,
+    TencentOCRProvider,
+    get_ocr_provider,
+    prepare_ocr_image,
+    validate_ocr_image,
+)
+from services.phonics import (
+    generate_phoneme_audio,
+    phonemes_for_ipa,
+    phonics_for_word,
+    syllable_audio_text,
+)
 from services.pronunciation import (
+    accent_label,
     analyze_sentence,
     clean_manual_ipa,
     ipa_for_word,
@@ -45,6 +63,7 @@ from services.translation import (
     get_translator,
 )
 from services.tts import (
+    CosyVoiceTTSProvider,
     MockTTSProvider,
     TTSError,
     VolcengineTTSProvider,
@@ -76,6 +95,10 @@ from .services import (
 
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 PASSWORD = "Brisk-Cobalt-Orbit-42"
+TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+    "/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
 
 
 def make_user(family, *, phone, display_name, role=User.Role.MEMBER):
@@ -106,6 +129,43 @@ class PronunciationServiceTests(TestCase):
 
     def test_unknown_word_is_not_guessed(self):
         self.assertIsNone(ipa_for_word("shazhengzhong"))
+
+    def test_british_ipa_uses_britfone_and_learner_symbols(self):
+        self.assertEqual(ipa_for_word("water", "uk"), "ˈwɔːtə")
+        self.assertEqual(ipa_for_word("comfortable", "uk"), "ˈkʌmftəbəl")
+        self.assertEqual(ipa_for_word("thought", "uk"), "ˈθɔːt")
+        self.assertEqual(ipa_for_word("don't", "uk"), "ˈdəʊnt")
+        self.assertIsNone(ipa_for_word("shazhengzhong", "uk"))
+        self.assertEqual(accent_label("uk"), "英式")
+        self.assertEqual(accent_label("us"), "美式")
+
+    def test_phonics_breakdown_for_water(self):
+        us = phonics_for_word("water", "us")
+        self.assertEqual(us.syllables, ("wa", "ter"))
+        self.assertEqual(us.ipa, "ˈwɔtər")
+        self.assertEqual(us.phonemes, ("w", "ɔ", "t", "ər"))
+        self.assertEqual(syllable_audio_text(us), "wa. ter. water.")
+
+        uk = phonics_for_word("water", "uk")
+        self.assertEqual(uk.syllables, ("wa", "ter"))
+        self.assertEqual(uk.ipa, "ˈwɔːtə")
+        self.assertEqual(uk.phonemes, ("w", "ɔː", "t", "ə"))
+
+    def test_phonics_breakdown_for_longer_word(self):
+        data = phonics_for_word("comfortable", "us")
+        self.assertIn("com", data.syllables)
+        self.assertIn("ər", data.phonemes)
+        self.assertEqual(phonemes_for_ipa("ˈθɔt"), ("θ", "ɔ", "t"))
+        self.assertEqual(phonemes_for_ipa(""), ())
+
+    def test_human_phoneme_audio_uses_recorded_library(self):
+        wav, voice, duration_ms = generate_phoneme_audio(
+            phonics_for_word("water", "uk")
+        )
+        self.assertTrue(wav.startswith(b"RIFF"))
+        self.assertEqual(voice, "human-commons-ipa")
+        self.assertGreater(duration_ms, 0)
+        self.assertGreater(len(wav), 1000)
 
     def test_analyze_sentence_marks_unknown_and_preserves_order(self):
         tokens = analyze_sentence("I wrote water for Shazhengzhong.")
@@ -499,6 +559,23 @@ class DiaryPageTests(DiaryFixtureMixin, TestCase):
 
 
 class TranslationFlowTests(DiaryFixtureMixin, TestCase):
+    def test_detail_offers_retranslate_after_chinese_edit(self):
+        diary = make_diary(self.owner)
+        create_english_version(diary, "Hello.", source="manual")
+        diary.chinese_text = "修改后的中文内容"
+        diary.save(update_fields=["chinese_text"])
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "diary-translate-button")
+        self.assertContains(response, "重新翻译")
+        self.assertContains(response, "中文日记在生成这版英文后又修改过")
+
+    def test_new_diary_detail_offers_translation_button(self):
+        diary = make_diary(self.owner)
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "diary-translate-button")
+        self.assertContains(response, "生成英文翻译")
+        self.assertContains(response, reverse("diary_translate", args=[diary.id]))
+
     def test_mock_translation_creates_version_sentences_and_ipa(self):
         diary = make_diary(self.owner)
         response = self.client.post(reverse("diary_translate", args=[diary.id]))
@@ -533,14 +610,24 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
 
         detail = self.client.get(reverse("diary_detail", args=[diary.id]))
         self.assertContains(detail, "日记对照")
-        self.assertContains(detail, "Today I wrote a short diary in Chinese.")
+        self.assertContains(detail, "Today")
+        self.assertContains(detail, "Chinese.")
         self.assertContains(detail, 'data-view-mode="both"')
         self.assertContains(detail, 'data-view-mode="zh"')
         self.assertContains(detail, 'data-view-mode="en"')
         self.assertContains(detail, "en-only")
-        self.assertContains(detail, "sentence-zh")
-        self.assertContains(detail, "practice-zh")
+        self.assertContains(detail, "practice-translation")
         self.assertContains(detail, "今天我写了一篇中文日记。")
+        self.assertContains(detail, 'class="bilingual-group is-linked"')
+        self.assertContains(detail, "bilingual-group-link")
+        self.assertContains(detail, f'href="#sentence-{sentences[0].id}"')
+        self.assertContains(detail, f'data-practice-target="sentence-{sentences[0].id}"')
+        self.assertContains(detail, f'id="sentence-{sentences[0].id}"')
+        self.assertContains(detail, "data-practice-modal hidden")
+        self.assertContains(detail, 'class="card practice-section"')
+        self.assertContains(detail, "data-diary-read-control")
+        self.assertContains(detail, "正常朗读这一句")
+        self.assertContains(detail, "慢速朗读这一句")
 
     def test_aligned_version_stores_grouped_sentences(self):
         diary = make_diary(self.owner)
@@ -746,6 +833,12 @@ class RecordingAndAudioTests(AudioTestBase):
         payload = response.json()
         self.assertTrue(payload["ok"])
         self.assertIn("/diaries/audio/", payload["audio_url"])
+        self.assertEqual(payload["recording_count"], 1)
+        self.assertTrue(payload["created_at_label"])
+        self.assertEqual(
+            payload["delete_url"],
+            reverse("delete_recording", args=[payload["recording_id"]]),
+        )
 
         asset = AudioAsset.objects.get(owner=self.owner, purpose=AudioAsset.Purpose.RECORDING)
         recording = Recording.objects.get(owner=self.owner, sentence=sentence)
@@ -765,6 +858,97 @@ class RecordingAndAudioTests(AudioTestBase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Recording.objects.exists())
         self.assertFalse(AudioAsset.objects.exists())
+
+    def _upload_recording(self, sentence):
+        upload = SimpleUploadedFile(
+            "voice.wav",
+            self.wav_bytes(),
+            content_type="audio/wav",
+        )
+        response = self.client.post(
+            reverse("upload_recording", args=[sentence.id]),
+            {"audio": upload},
+        )
+        self.assertEqual(response.status_code, 201)
+        return response
+
+    def test_delete_recording_removes_audio_and_file(self):
+        _, sentence = self.make_sentence()
+        self._upload_recording(sentence)
+        recording = Recording.objects.get(owner=self.owner, sentence=sentence)
+        asset = recording.audio
+        path = Path(self.media_dir.name) / asset.relative_path
+        self.assertTrue(path.exists())
+
+        response = self.client.post(
+            reverse("delete_recording", args=[recording.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["remaining"], 0)
+        self.assertFalse(Recording.objects.filter(id=recording.id).exists())
+        self.assertFalse(AudioAsset.objects.filter(id=asset.id).exists())
+        self.assertFalse(path.exists())
+
+    def test_delete_recording_reports_remaining_count(self):
+        _, sentence = self.make_sentence()
+        self._upload_recording(sentence)
+        self._upload_recording(sentence)
+        recordings = list(
+            Recording.objects.filter(owner=self.owner, sentence=sentence)
+        )
+        self.assertEqual(len(recordings), 2)
+        deleted = recordings[0]
+        kept = recordings[1]
+
+        response = self.client.post(
+            reverse("delete_recording", args=[deleted.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["remaining"], 1)
+        self.assertFalse(Recording.objects.filter(id=deleted.id).exists())
+        self.assertTrue(Recording.objects.filter(id=kept.id).exists())
+        self.assertTrue(
+            (Path(self.media_dir.name) / kept.audio.relative_path).exists()
+        )
+
+    def test_delete_recording_is_owner_scoped(self):
+        _, member_sentence = self.make_sentence(self.member)
+        self.client.force_login(self.member, backend=MODEL_BACKEND)
+        self._upload_recording(member_sentence)
+        recording = Recording.objects.get(
+            owner=self.member, sentence=member_sentence
+        )
+
+        self.client.force_login(self.owner, backend=MODEL_BACKEND)
+        response = self.client.post(
+            reverse("delete_recording", args=[recording.id])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Recording.objects.filter(id=recording.id).exists())
+
+    def test_delete_recording_is_post_only(self):
+        _, sentence = self.make_sentence()
+        self._upload_recording(sentence)
+        recording = Recording.objects.get(owner=self.owner, sentence=sentence)
+        response = self.client.get(
+            reverse("delete_recording", args=[recording.id])
+        )
+        self.assertEqual(response.status_code, 405)
+
+    def test_detail_shows_recording_delete_button(self):
+        diary, sentence = self.make_sentence()
+        self._upload_recording(sentence)
+        recording = Recording.objects.get(owner=self.owner, sentence=sentence)
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-recording-history")
+        self.assertContains(response, "data-delete-recording")
+        self.assertContains(
+            response,
+            reverse("delete_recording", args=[recording.id]),
+        )
 
     def test_cross_user_upload_is_404(self):
         _, member_sentence = self.make_sentence(self.member)
@@ -861,6 +1045,34 @@ class TTSFlowTests(AudioTestBase):
         self.assertContains(detail, "模拟提示音")
         self.assertContains(detail, "我的录音")
 
+    def test_sentence_tts_json_returns_audio_and_timings(self):
+        diary, sentence = self.make_sentence()
+        url = reverse("sentence_tts", args=[sentence.id, "normal"])
+        response = self.client.post(
+            url,
+            {"format": "json"},
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["cached"])
+        self.assertIn("/diaries/audio/", payload["audio_url"])
+        self.assertEqual(len(payload["timings"]), len(sentence.text.split()))
+        render = TtsRender.objects.get(owner=self.owner, sentence=sentence)
+        self.assertEqual(len(render.timings), len(sentence.text.split()))
+
+        cached = self.client.post(
+            url,
+            {"format": "json"},
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+        cached_payload = cached.json()
+        self.assertTrue(cached_payload["cached"])
+        self.assertEqual(cached_payload["audio_url"], payload["audio_url"])
+        self.assertEqual(cached_payload["timings"], payload["timings"])
+        self.assertEqual(TtsRender.objects.count(), 1)
+
     def test_normal_and_slow_have_separate_cache_entries(self):
         _, sentence = self.make_sentence()
         self.client.post(reverse("sentence_tts", args=[sentence.id, "normal"]))
@@ -945,10 +1157,21 @@ class WordTTSFlowTests(AudioTestBase):
         self.assertFalse(response.json()["cached"])
         self.assertTrue(WordTtsRender.objects.filter(target_word="I'm").exists())
 
-    def test_word_chips_show_syllable_hint(self):
+    def test_word_line_shows_word_and_ipa(self):
         diary, sentence = self.make_sentence()
         response = self.client.get(reverse("diary_detail", args=[diary.id]))
-        self.assertContains(response, "wa·ter")
+        self.assertContains(response, "data-word-unit")
+        self.assertContains(response, "word-ipa")
+        self.assertContains(response, "ˈwɔtər")
+        self.assertNotContains(response, "wa·ter")
+
+    def test_word_line_keeps_punctuation_with_words(self):
+        diary, _ = self.make_sentence(text="Good morning! I'm Miss Wu.")
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, ">Good</button>")
+        self.assertContains(response, ">morning!</button>")
+        self.assertContains(response, ">Wu.</button>")
+        self.assertContains(response, ">I&#x27;m</button>")
 
     def test_word_tts_generates_private_audio_and_cache(self):
         token = self._token()
@@ -1103,6 +1326,39 @@ class ReadAloudFlowTests(AudioTestBase):
         self.assertEqual(DiaryReadAloud.objects.count(), 2)
         counter = UsageCounter.objects.get(user=self.owner, feature="tts")
         self.assertEqual(counter.request_count, 2)
+
+    def test_accent_is_part_of_read_aloud_cache(self):
+        diary, version = self._make_aligned_diary()
+        url = reverse("diary_read_aloud", args=[diary.id])
+
+        self.owner.accent = User.Accent.UK
+        self.owner.save(update_fields=["accent"])
+        uk = self.client.post(url, {"speed": "normal"})
+        self.assertEqual(uk.status_code, 200)
+        self.assertFalse(uk.json()["cached"])
+        self.assertEqual(
+            DiaryReadAloud.objects.get(version=version).accent,
+            "uk",
+        )
+
+        self.owner.accent = User.Accent.US
+        self.owner.save(update_fields=["accent"])
+        us = self.client.post(url, {"speed": "normal"})
+        self.assertEqual(us.status_code, 200)
+        self.assertFalse(us.json()["cached"])
+        self.assertNotEqual(
+            uk.json()["audio_url"],
+            us.json()["audio_url"],
+        )
+        self.assertEqual(DiaryReadAloud.objects.count(), 2)
+        self.assertEqual(
+            set(DiaryReadAloud.objects.values_list("accent", flat=True)),
+            {"us", "uk"},
+        )
+
+        again = self.client.post(url, {"speed": "normal"})
+        self.assertTrue(again.json()["cached"])
+        self.assertEqual(DiaryReadAloud.objects.count(), 2)
 
     def test_invalid_read_aloud_speed_is_rejected(self):
         diary, _version = self._make_aligned_diary()
@@ -1510,12 +1766,230 @@ class VolcengineTTSServiceTests(TestCase):
 
     @override_settings(
         TTS_PROVIDER="volcengine",
+        VOLCENGINE_API_KEY="test-api-key",
+        VOLCENGINE_TTS_VOICE="en_female_hayley_uranus_bigtts",
+        VOLCENGINE_TTS_VOICE_UK=(
+            "en_female_authoritative-british_uranus_bigtts"
+        ),
+        VOLCENGINE_RESOURCE_ID="seed-tts-2.0",
+    )
+    def test_get_provider_uses_accent_voice(self):
+        self.assertEqual(
+            get_tts_provider("us").voice,
+            "en_female_hayley_uranus_bigtts",
+        )
+        self.assertEqual(
+            get_tts_provider("uk").voice,
+            "en_female_authoritative-british_uranus_bigtts",
+        )
+
+    @override_settings(
+        TTS_PROVIDER="volcengine",
+        VOLCENGINE_API_KEY="test-api-key",
+        VOLCENGINE_TTS_VOICE="en_female_hayley_uranus_bigtts",
+        VOLCENGINE_TTS_VOICE_UK="",
+        VOLCENGINE_RESOURCE_ID="seed-tts-2.0",
+    )
+    def test_empty_uk_voice_falls_back_to_us_voice(self):
+        self.assertEqual(
+            get_tts_provider("uk").voice,
+            "en_female_hayley_uranus_bigtts",
+        )
+
+    @override_settings(
+        TTS_PROVIDER="volcengine",
         VOLCENGINE_API_KEY="",
         VOLCENGINE_APP_ID="",
         VOLCENGINE_ACCESS_TOKEN="",
         VOLCENGINE_TTS_VOICE="",
     )
     def test_get_provider_refuses_missing_configuration(self):
+        with self.assertRaises(TTSError):
+            get_tts_provider()
+
+
+class CosyVoiceTTSServiceTests(TestCase):
+    @staticmethod
+    def _wav(duration_ms=500, rate=24_000):
+        frame_count = int(rate * duration_ms / 1000)
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(rate)
+            wav.writeframes(b"\x00\x00" * frame_count)
+        return buffer.getvalue()
+
+    def _provider(self, handler, **overrides):
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        values = {
+            "api_key": "test-key",
+            "workspace_id": "ws-test",
+            "model": "cosyvoice-v3.5-plus",
+            "voice": "cosyvoice-test-voice",
+            "base_url": "https://bailian.test/api/v1",
+            "ws_url": "wss://bailian.test/api-ws/v1/inference",
+            "sample_rate": 24_000,
+            "timeout": 20,
+            "client": client,
+        }
+        values.update(overrides)
+        return CosyVoiceTTSProvider(**values)
+
+    def test_http_word_synthesis_downloads_audio(self):
+        captured = {}
+        wav_data = self._wav()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST":
+                captured["payload"] = json.loads(request.content.decode("utf-8"))
+                captured["headers"] = dict(request.headers)
+                return httpx.Response(
+                    200,
+                    json={
+                        "output": {
+                            "audio": {"url": "https://audio.test/word.wav"}
+                        }
+                    },
+                )
+            if request.url.host == "audio.test":
+                return httpx.Response(
+                    200,
+                    headers={"content-type": "audio/wav"},
+                    content=wav_data,
+                )
+            return httpx.Response(404)
+
+        result = self._provider(handler).synthesize(
+            "water", speed="word", style="natural"
+        )
+        self.assertEqual(result.provider, "cosyvoice")
+        self.assertEqual(result.data, wav_data)
+        self.assertEqual(result.duration_ms, 500)
+        self.assertEqual(result.timings, ())
+        self.assertEqual(captured["payload"]["input"]["voice"], "cosyvoice-test-voice")
+        self.assertEqual(captured["payload"]["input"]["text"], "water")
+        self.assertEqual(
+            captured["headers"].get("x-dashscope-workspace"),
+            "ws-test",
+        )
+
+    def test_websocket_sentence_synthesis_collects_timings(self):
+        wav_data = self._wav()
+        socket = None
+
+        class FakeSocket:
+            def __init__(self, messages):
+                self.messages = list(messages)
+                self.sent = []
+
+            def send(self, message):
+                self.sent.append(json.loads(message))
+
+            def recv(self):
+                return self.messages.pop(0)
+
+            def close(self):
+                pass
+
+        def factory(url, header=None, timeout=None):
+            nonlocal socket
+            socket = FakeSocket(
+                [
+                    json.dumps(
+                        {
+                            "header": {
+                                "event": "task-started",
+                                "task_id": "task",
+                            }
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "header": {
+                                "event": "result-generated",
+                                "task_id": "task",
+                            },
+                            "payload": {
+                                "output": {
+                                    "sentence": {
+                                        "words": [
+                                            {
+                                                "text": "Hello",
+                                                "begin_time": 0,
+                                                "end_time": 400,
+                                            },
+                                            {
+                                                "text": " there",
+                                                "begin_time": 400,
+                                                "end_time": 900,
+                                            },
+                                        ]
+                                    }
+                                }
+                            },
+                        }
+                    ),
+                    wav_data,
+                    json.dumps(
+                        {
+                            "header": {
+                                "event": "task-finished",
+                                "task_id": "task",
+                            }
+                        }
+                    ),
+                ]
+            )
+            return socket
+
+        result = self._provider(
+            lambda request: httpx.Response(500),
+            connection_factory=factory,
+        ).synthesize(
+            "Hello there.",
+            speed="normal",
+            style="natural",
+            enable_subtitles=True,
+        )
+        self.assertEqual(result.data, wav_data)
+        self.assertEqual(result.duration_ms, 500)
+        self.assertEqual(
+            [item["word"] for item in result.timings],
+            ["Hello", "there"],
+        )
+        self.assertEqual(result.timings[0]["start_ms"], 0)
+        self.assertEqual(socket.sent[0]["header"]["action"], "run-task")
+        self.assertTrue(
+            socket.sent[0]["payload"]["parameters"]["word_timestamp_enabled"]
+        )
+        self.assertEqual(socket.sent[1]["header"]["action"], "continue-task")
+        self.assertEqual(socket.sent[2]["header"]["action"], "finish-task")
+
+    @override_settings(
+        TTS_PROVIDER="cosyvoice",
+        DASHSCOPE_API_KEY="test-key",
+        DASHSCOPE_WORKSPACE_ID="ws-test",
+        COSYVOICE_TTS_MODEL="cosyvoice-v3.5-plus",
+        COSYVOICE_TTS_VOICE_US="us-voice",
+        COSYVOICE_TTS_VOICE_UK="uk-voice",
+        COSYVOICE_TTS_BASE_URL="https://bailian.test/api/v1",
+        COSYVOICE_TTS_WS_URL="wss://bailian.test/api-ws/v1/inference",
+        COSYVOICE_TTS_SAMPLE_RATE=24_000,
+        COSYVOICE_TTS_TIMEOUT=20,
+    )
+    def test_get_provider_builds_cosyvoice_adapter_and_accent_voice(self):
+        provider = get_tts_provider("us")
+        self.assertIsInstance(provider, CosyVoiceTTSProvider)
+        self.assertEqual(provider.voice, "us-voice")
+        self.assertEqual(get_tts_provider("uk").voice, "uk-voice")
+
+    @override_settings(
+        TTS_PROVIDER="cosyvoice",
+        DASHSCOPE_API_KEY="",
+        COSYVOICE_TTS_VOICE_US="us-voice",
+    )
+    def test_get_provider_refuses_missing_cosyvoice_key(self):
         with self.assertRaises(TTSError):
             get_tts_provider()
 
@@ -1642,6 +2116,42 @@ class AssessmentServiceTests(TestCase):
         self.assertTrue(fake.closed)
         self.assertIn("eval_mode=0", captured["url"])
         self.assertEqual(captured["timeout"], 20)
+
+    def test_tencent_assessor_maps_resource_package_error(self):
+        class FakeConnection:
+            def __init__(self):
+                self.closed = False
+
+            def send_binary(self, data):
+                pass
+
+            def send(self, data):
+                pass
+
+            def recv(self):
+                return json.dumps(
+                    {
+                        "code": 4004,
+                        "message": "资源包耗尽，请开通后付费或者购买资源包",
+                        "final": 0,
+                    }
+                )
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeConnection()
+        assessor = TencentSOEAssessor(
+            app_id="app",
+            secret_id="sid",
+            secret_key="skey",
+            connection_factory=lambda url, timeout: fake,
+        )
+        with self.assertRaises(AssessmentError) as raised:
+            assessor.assess("water", b"audio")
+        self.assertIn("额度不足", str(raised.exception))
+        self.assertIn("资源包", str(raised.exception))
+        self.assertTrue(fake.closed)
 
     def test_tencent_assessor_maps_oov_error(self):
         class FakeConnection:
@@ -1877,6 +2387,17 @@ class WordLookupPageTests(DiaryFixtureMixin, TestCase):
         self.assertContains(response, "单个英文单词")
         self.assertFalse(WordLookup.objects.exists())
 
+    def test_lookup_get_query_reuses_cached_word(self):
+        self.client.post(reverse("word_lookup"), {"q": "water"})
+        response = self.client.get(reverse("word_lookup") + "?q=water")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "water")
+        self.assertEqual(WordLookup.objects.count(), 1)
+        counter = UsageCounter.objects.get(
+            user=self.owner, feature="translation"
+        )
+        self.assertEqual(counter.request_count, 1)
+
 
 class LookupTTSFlowTests(AudioTestBase):
     def _lookup(self):
@@ -1963,3 +2484,725 @@ class LookupAssessmentFlowTests(AudioTestBase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PronunciationAttempt.objects.exists())
+
+
+class AccentPreferenceTests(DiaryFixtureMixin, TestCase):
+    def test_set_accent_updates_user_and_returns_to_next_page(self):
+        response = self.client.post(
+            reverse("set_accent"),
+            {"accent": "uk", "next": reverse("diary_list")},
+        )
+        self.assertRedirects(response, reverse("diary_list"))
+        self.owner.refresh_from_db()
+        self.assertEqual(self.owner.accent, User.Accent.UK)
+
+    def test_invalid_accent_is_rejected(self):
+        response = self.client.post(
+            reverse("set_accent"),
+            {"accent": "ca", "next": reverse("diary_list")},
+        )
+        self.assertRedirects(response, reverse("home"))
+        self.owner.refresh_from_db()
+        self.assertEqual(self.owner.accent, User.Accent.US)
+
+    def test_external_next_url_is_not_followed(self):
+        response = self.client.post(
+            reverse("set_accent"),
+            {"accent": "uk", "next": "https://example.invalid/steal"},
+        )
+        self.assertRedirects(response, reverse("home"))
+
+    def test_nav_shows_both_accent_choices(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "data-accent-menu")
+        self.assertContains(response, "accent-option")
+        self.assertContains(response, "nav-link")
+        self.assertContains(response, 'name="accent"')
+        self.assertContains(response, 'value="uk"')
+        self.assertContains(response, "美音")
+        self.assertContains(response, "英音")
+
+
+class AccentIPATests(DiaryFixtureMixin, TestCase):
+    def _water_diary(self):
+        diary = make_diary(self.owner)
+        version = create_english_version(
+            diary,
+            "water",
+            source="manual",
+        )
+        token = version.sentences.get().tokens.get()
+        return diary, version, token
+
+    def test_detail_page_uses_uk_ipa_for_uk_user(self):
+        diary, _version, _token = self._water_diary()
+        self.owner.accent = User.Accent.UK
+        self.owner.save(update_fields=["accent"])
+
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "/ˈwɔːtə/")
+        self.assertNotContains(response, "/ˈwɔtər/")
+
+    def test_detail_page_keeps_us_ipa_for_us_user(self):
+        diary, _version, _token = self._water_diary()
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(response, "/ˈwɔtər/")
+        self.assertNotContains(response, "/ˈwɔːtə/")
+
+    def test_lookup_page_uses_uk_ipa_for_uk_user(self):
+        lookup_word(self.owner, "water")
+        self.owner.accent = User.Accent.UK
+        self.owner.save(update_fields=["accent"])
+
+        response = self.client.post(
+            reverse("word_lookup"),
+            {"q": "water"},
+        )
+        self.assertContains(response, "/ˈwɔːtə/")
+        self.assertNotContains(response, "/ˈwɔtər/")
+
+    def test_uk_ipa_correction_writes_ipa_uk_only(self):
+        _diary, _version, token = self._water_diary()
+        self.owner.accent = User.Accent.UK
+        self.owner.save(update_fields=["accent"])
+
+        response = self.client.post(
+            reverse("edit_sentence_ipa", args=[token.sentence_id]),
+            {f"ipa_{token.pk.hex}": "test-uk"},
+        )
+        self.assertRedirects(
+            response,
+            reverse("diary_detail", args=[token.sentence.version.diary_id]),
+        )
+        token.refresh_from_db()
+        self.assertEqual(token.ipa_uk, "test-uk")
+        self.assertEqual(token.ipa, "ˈwɔtər")
+        self.assertEqual(token.source, WordToken.Source.MANUAL)
+
+
+class PhonicsPageTests(DiaryFixtureMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.diary = make_diary(self.owner)
+        self.version = create_english_version(
+            self.diary,
+            "water",
+            source="manual",
+        )
+        self.token = self.version.sentences.get().tokens.get()
+        self.lookup = lookup_word(self.owner, "water")
+
+    def test_detail_page_does_not_link_to_word_phonics(self):
+        response = self.client.get(
+            reverse("diary_detail", args=[self.diary.id])
+        )
+        self.assertNotContains(
+            response,
+            reverse("word_phonics", args=[self.token.id]),
+        )
+        self.assertNotContains(response, "拼读")
+
+    def test_word_phonics_page_renders_breakdown_and_controls(self):
+        response = self.client.get(
+            reverse("word_phonics", args=[self.token.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "自然拼读")
+        self.assertContains(response, "音节拼读")
+        self.assertContains(response, "wa")
+        self.assertContains(response, "ter")
+        self.assertContains(response, "ˈwɔtər")
+        self.assertContains(response, 'data-phonics-mode="phoneme"')
+        self.assertContains(response, 'data-phonics-mode="syllable"')
+
+    def test_word_phonics_page_uses_uk_breakdown_for_uk_user(self):
+        self.owner.accent = User.Accent.UK
+        self.owner.save(update_fields=["accent"])
+        response = self.client.get(
+            reverse("word_phonics", args=[self.token.id])
+        )
+        self.assertContains(response, "ˈwɔːtə")
+        self.assertNotContains(response, "ˈwɔtər")
+
+    def test_word_phonics_page_is_owner_scoped(self):
+        self.client.force_login(self.member, backend=MODEL_BACKEND)
+        response = self.client.get(
+            reverse("word_phonics", args=[self.token.id])
+        )
+        self.assertEqual(response.status_code, 404)
+
+        self.client.logout()
+        response = self.client.get(
+            reverse("word_phonics", args=[self.token.id])
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_lookup_page_does_not_link_to_phonics(self):
+        response = self.client.post(
+            reverse("word_lookup"),
+            {"q": "water"},
+        )
+        self.assertNotContains(
+            response,
+            reverse("lookup_phonics", args=[self.lookup.id]),
+        )
+        self.assertNotContains(response, "拼读示范")
+
+    def test_lookup_phonics_page_renders(self):
+        response = self.client.get(
+            reverse("lookup_phonics", args=[self.lookup.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "water")
+        self.assertContains(response, "自然拼读")
+
+        self.client.logout()
+        response = self.client.get(
+            reverse("lookup_phonics", args=[self.lookup.id])
+        )
+        self.assertEqual(response.status_code, 302)
+
+
+class PhonicsAudioTests(AudioTestBase):
+    def _token(self):
+        diary = make_diary(self.owner)
+        version = create_english_version(
+            diary,
+            "water",
+            source="manual",
+        )
+        return version.sentences.get().tokens.get()
+
+    def test_syllable_audio_is_private_cached_and_quota_counted(self):
+        token = self._token()
+        url = reverse(
+            "word_phonics_audio",
+            args=[token.id, "syllable"],
+        )
+        first = self.client.post(url)
+        self.assertEqual(first.status_code, 200)
+        payload = first.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["cached"])
+
+        render = WordTtsRender.objects.get(owner=self.owner)
+        self.assertEqual(render.target_word, "water")
+        self.assertEqual(render.audio.purpose, AudioAsset.Purpose.WORD_TTS)
+        path = Path(self.media_dir.name) / render.audio.relative_path
+        self.assertTrue(path.exists())
+
+        second = self.client.post(url)
+        self.assertTrue(second.json()["cached"])
+        self.assertEqual(WordTtsRender.objects.count(), 1)
+        counter = UsageCounter.objects.get(user=self.owner, feature="tts")
+        self.assertEqual(counter.request_count, 1)
+
+    def test_phoneme_audio_is_private_and_cached(self):
+        token = self._token()
+        url = reverse(
+            "word_phonics_audio",
+            args=[token.id, "phoneme"],
+        )
+        with patch(
+            "diaries.views.generate_phoneme_audio",
+            return_value=(self.wav_bytes(200), "espeak-test", 200),
+        ):
+            first = self.client.post(url)
+            self.assertEqual(first.status_code, 200)
+            self.assertTrue(first.json()["ok"])
+            render = WordTtsRender.objects.get(owner=self.owner)
+            self.assertEqual(render.provider, "human_phonemes")
+            self.assertEqual(render.voice, "human-commons-ipa")
+            self.assertEqual(
+                render.audio.purpose,
+                AudioAsset.Purpose.WORD_TTS,
+            )
+            path = Path(self.media_dir.name) / render.audio.relative_path
+            self.assertTrue(path.exists())
+
+            second = self.client.post(url)
+            self.assertTrue(second.json()["cached"])
+            self.assertEqual(WordTtsRender.objects.count(), 1)
+
+    def test_lookup_phonics_audio_uses_lookup_target(self):
+        lookup = lookup_word(self.owner, "water")
+        url = reverse(
+            "lookup_phonics_audio",
+            args=[lookup.id, "syllable"],
+        )
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        render = WordTtsRender.objects.get(owner=self.owner)
+        self.assertEqual(render.lookup, lookup)
+        self.assertIsNone(render.sentence)
+
+    def test_invalid_phonics_mode_is_rejected(self):
+        token = self._token()
+        response = self.client.post(
+            reverse("word_phonics_audio", args=[token.id, "fast"])
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(WordTtsRender.objects.exists())
+
+    def test_phonics_audio_is_owner_scoped_and_post_only(self):
+        token = self._token()
+        url = reverse(
+            "word_phonics_audio",
+            args=[token.id, "syllable"],
+        )
+        self.assertEqual(self.client.get(url).status_code, 405)
+
+        self.client.force_login(self.member, backend=MODEL_BACKEND)
+        self.assertEqual(self.client.post(url).status_code, 404)
+
+        self.client.logout()
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+
+
+class OCRServiceTests(TestCase):
+    def test_mock_provider_returns_fixed_text_without_network(self):
+        result = MockOCRProvider().recognize(TINY_PNG)
+        self.assertEqual(result.text, MOCK_OCR_TEXT)
+        self.assertEqual(result.provider, "mock")
+        self.assertEqual(result.line_count, 2)
+
+    def test_image_validation_accepts_png_and_rejects_other_bytes(self):
+        self.assertEqual(validate_ocr_image(TINY_PNG), "image/png")
+        with self.assertRaises(OCRError):
+            validate_ocr_image(b"not an image")
+        with self.assertRaises(OCRError):
+            validate_ocr_image(b"")
+
+    def _png(self, width=100, height=80):
+        image = Image.new("RGB", (width, height), (240, 240, 240))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        return output.getvalue()
+
+    def test_prepare_ocr_image_crops_normalized_region(self):
+        cropped = prepare_ocr_image(
+            self._png(100, 80),
+            (0.25, 0.25, 0.5, 0.5),
+        )
+        result = Image.open(io.BytesIO(cropped))
+        self.assertEqual(result.size, (50, 40))
+        self.assertEqual(result.format, "JPEG")
+        self.assertLessEqual(len(cropped), 5 * 1024 * 1024)
+
+    def test_prepare_ocr_image_compresses_large_photo(self):
+        cropped = prepare_ocr_image(self._png(3000, 100), None)
+        result = Image.open(io.BytesIO(cropped))
+        self.assertEqual(result.format, "JPEG")
+        self.assertLessEqual(max(result.size), 2400)
+
+    def test_prepare_ocr_image_reencodes_small_photo(self):
+        prepared = prepare_ocr_image(self._png(100, 80), None)
+        result = Image.open(io.BytesIO(prepared))
+        self.assertEqual(result.format, "JPEG")
+        self.assertEqual(result.size, (100, 80))
+
+    def test_prepare_ocr_image_rejects_invalid_crop(self):
+        with self.assertRaises(OCRError):
+            prepare_ocr_image(self._png(), (0.8, 0.1, 0.5, 0.5))
+
+    def test_prepare_ocr_image_uses_exif_orientation_before_crop(self):
+        image = Image.new("RGB", (100, 50), (255, 255, 255))
+        exif = image.getexif()
+        exif[0x0112] = 6
+        output = io.BytesIO()
+        image.save(output, format="JPEG", exif=exif)
+        prepared = prepare_ocr_image(output.getvalue(), (0, 0, 0.5, 0.5))
+        result = Image.open(io.BytesIO(prepared))
+        self.assertEqual(result.size, (25, 50))
+
+    def test_tencent_provider_signs_and_parses_detected_text(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["headers"] = request.headers
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "Response": {
+                        "TextDetections": [
+                            {"DetectedText": "Hello."},
+                            {"DetectedText": "How are you?"},
+                        ],
+                        "RequestId": "test-request",
+                    }
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        provider = TencentOCRProvider(
+            secret_id="AKIDtest",
+            secret_key="test-secret",
+            timestamp=1700000000,
+            client=client,
+        )
+        result = provider.recognize(TINY_PNG)
+
+        self.assertEqual(result.text, "Hello.\nHow are you?")
+        self.assertEqual(result.provider, "tencent_ocr")
+        self.assertEqual(captured["url"], "https://ocr.tencentcloudapi.com/")
+        headers = captured["headers"]
+        self.assertEqual(headers["X-TC-Action"], "GeneralBasicOCR")
+        self.assertEqual(headers["X-TC-Version"], "2018-11-19")
+        self.assertEqual(headers["X-TC-Region"], "ap-guangzhou")
+        self.assertIn(
+            "Credential=AKIDtest/2023-11-14/ocr/tc3_request",
+            headers["Authorization"],
+        )
+        self.assertIn("SignedHeaders=content-type;host", headers["Authorization"])
+        self.assertEqual(captured["payload"]["LanguageType"], "zh")
+        self.assertEqual(
+            base64.b64decode(captured["payload"]["ImageBase64"]),
+            TINY_PNG,
+        )
+
+    def test_tencent_provider_maps_error_without_leaking_secrets(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "Response": {
+                        "Error": {
+                            "Code": "AuthFailure.SignatureFailure",
+                            "Message": "bad signature",
+                        },
+                        "RequestId": "test-request",
+                    }
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        provider = TencentOCRProvider(
+            secret_id="AKIDtest",
+            secret_key="test-secret",
+            client=client,
+        )
+        with self.assertRaises(OCRError) as raised:
+            provider.recognize(TINY_PNG)
+        message = str(raised.exception)
+        self.assertIn("AuthFailure.SignatureFailure", message)
+        self.assertNotIn("test-secret", message)
+
+    @override_settings(OCR_PROVIDER="mock")
+    def test_default_provider_is_mock(self):
+        self.assertIsInstance(get_ocr_provider(), MockOCRProvider)
+
+    @override_settings(
+        OCR_PROVIDER="tencent",
+        TENCENTCLOUD_SECRET_ID="",
+        TENCENTCLOUD_SECRET_KEY="",
+    )
+    def test_tencent_requires_credentials(self):
+        with self.assertRaises(OCRError):
+            get_ocr_provider()
+
+
+class EnglishToChineseTranslationTests(TestCase):
+    def test_mock_translator_returns_one_chinese_pair_per_sentence(self):
+        pairs = MockTranslator().translate_english_pairs(
+            "Hello. How are you?"
+        )
+        self.assertEqual(len(pairs), 2)
+        self.assertEqual(
+            [pair.english for pair in pairs],
+            ["Hello.", "How are you?"],
+        )
+        self.assertTrue(all("模拟翻译" in pair.chinese for pair in pairs))
+
+    def test_deepseek_english_pair_request_shape_and_response(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {"translations": ["你好。", "你好吗？"]}
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        translator = DeepSeekTranslator(
+            api_key="test-key",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            client=client,
+        )
+        pairs = translator.translate_english_pairs("Hello. How are you?")
+
+        self.assertEqual([pair.chinese for pair in pairs], ["你好。", "你好吗？"])
+        self.assertEqual(
+            [pair.english for pair in pairs],
+            ["Hello.", "How are you?"],
+        )
+        self.assertEqual(captured["payload"]["max_tokens"], 4096)
+        self.assertIn(
+            "English",
+            captured["payload"]["messages"][0]["content"],
+        )
+        self.assertEqual(
+            json.loads(captured["payload"]["messages"][1]["content"]),
+            ["Hello.", "How are you?"],
+        )
+
+    def test_deepseek_english_pair_count_mismatch_raises(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {"translations": ["只有一句。"]}
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        translator = DeepSeekTranslator(
+            api_key="test-key",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            client=client,
+        )
+        with self.assertRaises(TranslationError):
+            translator.translate_english_pairs("Hello. How are you?")
+
+
+class OCRFlowTests(DiaryFixtureMixin, TestCase):
+    def _image(self):
+        return SimpleUploadedFile(
+            "page.png",
+            TINY_PNG,
+            content_type="image/png",
+        )
+
+    def test_ocr_page_requires_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("ocr_upload"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_ocr_upload_shows_editable_text_without_creating_diary(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {"step": "ocr", "image": self._image()},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "校对识别结果")
+        self.assertContains(response, "The weather is lovely today.")
+        self.assertFalse(DiaryEntry.objects.exists())
+        counter = UsageCounter.objects.get(user=self.owner, feature="ocr")
+        self.assertEqual(counter.request_count, 1)
+
+    def test_ocr_upload_rejects_non_image(self):
+        upload = SimpleUploadedFile(
+            "page.png",
+            b"not an image",
+            content_type="image/png",
+        )
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {"step": "ocr", "image": upload},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "只支持 JPG")
+        self.assertFalse(DiaryEntry.objects.exists())
+        self.assertFalse(
+            UsageCounter.objects.filter(user=self.owner, feature="ocr").exists()
+        )
+
+    def test_ocr_upload_accepts_crop_coordinates(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {
+                "step": "ocr",
+                "image": self._image(),
+                "crop_x": "0.1",
+                "crop_y": "0.2",
+                "crop_w": "0.5",
+                "crop_h": "0.4",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "校对识别结果")
+        self.assertEqual(
+            UsageCounter.objects.get(user=self.owner, feature="ocr").request_count,
+            1,
+        )
+
+    def test_ocr_upload_rejects_invalid_crop(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {
+                "step": "ocr",
+                "image": self._image(),
+                "crop_x": "0.8",
+                "crop_y": "0.1",
+                "crop_w": "0.5",
+                "crop_h": "0.5",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "裁剪区域无效")
+        self.assertFalse(
+            UsageCounter.objects.filter(user=self.owner, feature="ocr").exists()
+        )
+
+    @override_settings(OCR_DAILY_REQUEST_LIMIT=0)
+    def test_ocr_quota_blocks_upload(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {"step": "ocr", "image": self._image()},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "今天最多识别 0 张照片")
+        self.assertFalse(DiaryEntry.objects.exists())
+
+    @override_settings(
+        OCR_PROVIDER="tencent",
+        TENCENTCLOUD_SECRET_ID="",
+        TENCENTCLOUD_SECRET_KEY="",
+    )
+    def test_missing_ocr_credentials_shows_friendly_error(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {"step": "ocr", "image": self._image()},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "尚未配置")
+        self.assertFalse(DiaryEntry.objects.exists())
+
+    def test_create_from_ocr_text_creates_owned_aligned_ocr_diary(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {
+                "step": "create",
+                "title": "书页练习",
+                "english_text": (
+                    "The weather is lovely today. "
+                    "I took a walk with my family."
+                ),
+            },
+        )
+        diary = DiaryEntry.objects.get()
+        self.assertRedirects(
+            response,
+            reverse("diary_detail", args=[diary.id]),
+        )
+        self.assertEqual(diary.owner, self.owner)
+        self.assertEqual(diary.title, "书页练习")
+        self.assertIn("模拟翻译", diary.chinese_text)
+        version = diary.current_version
+        self.assertEqual(version.source, EnglishVersion.Source.OCR)
+        self.assertEqual(version.version_no, 1)
+        self.assertEqual(version.sentences.count(), 2)
+        self.assertTrue(
+            all(sentence.chinese_text for sentence in version.sentences.all())
+        )
+        counter = UsageCounter.objects.get(
+            user=self.owner, feature="translation"
+        )
+        self.assertEqual(counter.request_count, 1)
+        self.assertFalse(
+            UsageCounter.objects.filter(user=self.owner, feature="ocr").exists()
+        )
+
+    def test_create_from_chinese_ocr_text_translates_to_english(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {
+                "step": "create",
+                "direction": "zh_to_en",
+                "title": "中文书页",
+                "source_text": "今天天气很好。",
+            },
+        )
+        diary = DiaryEntry.objects.get()
+        self.assertRedirects(
+            response,
+            reverse("diary_detail", args=[diary.id]),
+        )
+        self.assertEqual(diary.title, "中文书页")
+        version = diary.current_version
+        self.assertEqual(version.source, EnglishVersion.Source.OCR)
+        self.assertTrue(version.sentences.exists())
+        self.assertTrue(
+            all(
+                sentence.chinese_text and sentence.text
+                for sentence in version.sentences.all()
+            )
+        )
+
+    def test_chinese_to_english_requires_chinese_text(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {
+                "step": "create",
+                "direction": "zh_to_en",
+                "source_text": "English only",
+            },
+        )
+        self.assertContains(response, "没有找到中文内容")
+        self.assertFalse(DiaryEntry.objects.exists())
+
+    def test_ocr_diary_detail_shows_ocr_notice(self):
+        self.client.post(
+            reverse("ocr_upload"),
+            {
+                "step": "create",
+                "title": "书页练习",
+                "english_text": "The weather is lovely today.",
+            },
+        )
+        diary = DiaryEntry.objects.get()
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "拍照识别生成的练习页")
+        self.assertContains(response, "拍照识别")
+        self.assertContains(response, "data-practice-modal hidden")
+        self.assertContains(response, "data-diary-read-control")
+
+    def test_create_requires_english_text(self):
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {"step": "create", "english_text": "只有中文。"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "没有找到英文内容")
+        self.assertFalse(DiaryEntry.objects.exists())
+
+    @override_settings(TRANSLATION_DAILY_REQUEST_LIMIT=0)
+    def test_create_translation_quota_keeps_text_and_creates_nothing(self):
+        english_text = "The weather is lovely today."
+        response = self.client.post(
+            reverse("ocr_upload"),
+            {"step": "create", "english_text": english_text},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "今天最多翻译 0 次")
+        self.assertContains(response, english_text)
+        self.assertFalse(DiaryEntry.objects.exists())

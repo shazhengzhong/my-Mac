@@ -13,6 +13,7 @@ urlpatterns = [
     path("members/", views.members, name="members"),
     path("recovery/", views.recovery_reset, name="recovery_reset"),
     path("settings/", views.account_settings, name="account_settings"),
+    path("settings/accent/", views.set_accent, name="set_accent"),
     path(
         "settings/password/",
         views.AccountPasswordChangeView.as_view(),

@@ -1,6 +1,7 @@
 """Per-user diaries, English versions, sentences, IPA tokens, and usage counters."""
 
 import hashlib
+import json
 import uuid
 
 from django.conf import settings
@@ -48,6 +49,7 @@ class EnglishVersion(models.Model):
         MOCK = "mock", "模拟翻译"
         DEEPSEEK = "deepseek", "DeepSeek 翻译"
         MANUAL = "manual", "手动英文"
+        OCR = "ocr", "拍照识别"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     diary = models.ForeignKey(
@@ -120,6 +122,7 @@ class WordToken(models.Model):
     ordinal = models.PositiveIntegerField()
     surface = models.CharField(max_length=120)
     ipa = models.CharField(max_length=120, blank=True)
+    ipa_uk = models.CharField(max_length=120, blank=True, default="")
     source = models.CharField(max_length=20, choices=Source.choices)
 
     class Meta:
@@ -140,6 +143,7 @@ class WordLookup(models.Model):
     word = models.CharField(max_length=120, unique=True)
     display_word = models.CharField(max_length=120)
     ipa = models.CharField(max_length=120, blank=True, default="")
+    ipa_uk = models.CharField(max_length=120, blank=True, default="")
     syllables = models.CharField(max_length=255, blank=True, default="")
     translation = models.TextField()
     part_of_speech = models.CharField(max_length=40, blank=True, default="")
@@ -267,6 +271,7 @@ class TtsRender(models.Model):
     model = models.CharField(max_length=100)
     cache_key = models.CharField(max_length=64)
     char_count = models.PositiveIntegerField(default=0)
+    timings = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -277,6 +282,10 @@ class TtsRender(models.Model):
                 name="diaries_unique_user_tts_cache",
             )
         ]
+
+    @property
+    def timings_json(self) -> str:
+        return json.dumps(self.timings or [], ensure_ascii=False)
 
     def __str__(self) -> str:
         return f"{self.speed} TTS {self.id}"
@@ -342,6 +351,10 @@ class DiaryReadAloud(models.Model):
         NORMAL = "normal", "正常"
         SLOW = "slow", "慢速"
 
+    class Accent(models.TextChoices):
+        US = "us", "美音"
+        UK = "uk", "英音"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -357,6 +370,11 @@ class DiaryReadAloud(models.Model):
         max_length=10,
         choices=Speed.choices,
         default=Speed.NORMAL,
+    )
+    accent = models.CharField(
+        max_length=2,
+        choices=Accent.choices,
+        default=Accent.US,
     )
     audio = models.OneToOneField(
         AudioAsset,
@@ -375,15 +393,15 @@ class DiaryReadAloud(models.Model):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["version", "speed"],
-                name="diaries_unique_version_read_aloud_speed",
+                fields=["version", "speed", "accent"],
+                name="diaries_unique_version_read_aloud_accent",
             )
         ]
 
     def __str__(self) -> str:
         return (
             f"全文朗读 v{self.version.version_no} "
-            f"{self.speed} {self.id}"
+            f"{self.speed} {self.accent} {self.id}"
         )
 
 

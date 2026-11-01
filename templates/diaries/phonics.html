@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}拼读示范 · {{ phonics.display_word }} · 英语口语练习{% endblock %}
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">拼读示范</p>
+      <h1>{{ phonics.display_word }}</h1>
+      <p class="lead">先听音节或音素怎么拼，再回到整词发音。</p>
+    </div>
+    <a class="button secondary" href="{{ back_url }}">返回</a>
+  </div>
+
+  <section
+    class="card phonics-card"
+    data-phonics-root
+    data-word-audio-url="{{ word_audio_url }}"
+  >
+    {% if sentence %}
+      <p class="english-sentence" lang="en">{{ sentence.text }}</p>
+      {% if sentence.chinese_text %}
+        <p class="sentence-zh">{{ sentence.chinese_text }}</p>
+      {% endif %}
+    {% endif %}
+    {% if lookup %}
+      {% if lookup.part_of_speech %}
+        <p class="muted">{{ lookup.part_of_speech }}</p>
+      {% endif %}
+      <p class="lookup-translation">{{ lookup.translation|linebreaksbr }}</p>
+    {% endif %}
+
+    <p class="phonics-word" lang="en">
+      {% for syllable in phonics.syllables %}<span class="phonics-syllable {% cycle 'syllable-a' 'syllable-b' %}">{{ syllable }}</span>{% endfor %}
+    </p>
+
+    <div class="phonics-syllables" aria-label="音节">
+      {% for syllable in phonics.syllables %}
+        <span class="phonics-chip">{{ syllable }}</span>
+      {% endfor %}
+    </div>
+
+    <p class="phonics-ipa">
+      {% if phonics.ipa %}
+        <span class="ipa">/{{ phonics.ipa }}/</span>
+        <span class="muted">{{ phonics.accent_label }}</span>
+      {% else %}
+        <span class="ipa unknown">{{ phonics.accent_label }}音未收录</span>
+      {% endif %}
+    </p>
+
+    {% if phonics.phonemes %}
+      <div class="phoneme-grid" aria-label="音素">
+        {% for phoneme in phonics.phonemes %}
+          <span class="phoneme-chip">{{ phoneme }}</span>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">这个单词还没有可用的音素数据。</p>
+    {% endif %}
+
+    <div class="phonics-actions">
+      <button class="button secondary" type="button" data-phonics-word>
+        整词发音
+      </button>
+      <button
+        class="button"
+        type="button"
+        data-phonics-mode="phoneme"
+        data-url="{{ phoneme_audio_url }}"
+        {% if not phonics.phonemes %}disabled{% endif %}
+      >
+        自然拼读
+      </button>
+      <button
+        class="button"
+        type="button"
+        data-phonics-mode="syllable"
+        data-url="{{ syllable_audio_url }}"
+        {% if not phonics.phonemes %}disabled{% endif %}
+      >
+        音节拼读
+      </button>
+    </div>
+    <p class="phonics-status" role="status" aria-live="polite"></p>
+    <audio class="phonics-audio" controls preload="none" hidden></audio>
+
+    <p class="muted small phonics-note">
+      「自然拼读」逐个播放真人音素录音，最后接整词自然发音；音素来自
+      Wikimedia Commons 真人录音（CC BY-SA 3.0，署名见项目内 CREDITS.md）。
+      「音节拼读」按音节播放，再合成整词。
+    </p>
+  </section>
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'js/phonics.js' %}" defer></script>
+{% endblock %}

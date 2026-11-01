@@ -1,18 +1,20 @@
 (() => {
   "use strict";
 
+  const MAX_SECONDS = 60;
+  const TARGET_RATE = 16000;
+  const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   const controls = Array.from(document.querySelectorAll("[data-record-control]"));
 
-  // Shared with word-assessor.js on the diary detail page.
+  // Shared with word-assessor.js, including pages with no sentence recorder
+  // (for example the standalone lookup page). These constants must be
+  // initialized before the early return below.
   window.FamilyAudio = { chooseMimeType, convertToWav, getCookie };
 
   if (controls.length === 0) {
     return;
   }
 
-  const MAX_SECONDS = 60;
-  const TARGET_RATE = 16000;
-  const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   let activeSession = null;
 
   function setStatus(control, message, kind = "") {
@@ -26,16 +28,28 @@
     }
   }
 
+  function setButtonLabel(button, label) {
+    const labelSpan = button.querySelector(".button-label");
+    if (labelSpan) {
+      labelSpan.textContent = label;
+    } else {
+      button.textContent = label;
+    }
+    button.setAttribute("aria-label", label);
+  }
+
   function updateButtons() {
     controls.forEach((control) => {
       const button = control.querySelector(".js-record-button");
       if (!button) return;
       if (activeSession && activeSession.control === control) {
-        button.textContent = activeSession.busy ? "正在处理…" : "停止录音";
+        setButtonLabel(button, activeSession.busy ? "正在处理…" : "停止录音");
         button.disabled = Boolean(activeSession.busy);
+        button.classList.toggle("is-recording", !activeSession.busy);
       } else {
-        button.textContent = "开始录音";
+        setButtonLabel(button, "开始录音");
         button.disabled = Boolean(activeSession);
+        button.classList.remove("is-recording");
       }
     });
   }
@@ -209,6 +223,84 @@
     return payload;
   }
 
+  function addRecordingItem(control, payload) {
+    const card = control.closest("[id^='sentence-'], .sentence-card");
+    if (!card) {
+      return;
+    }
+    let history = card.querySelector("[data-recording-history]");
+    if (!history) {
+      history = document.createElement("details");
+      history.className = "recording-history";
+      history.setAttribute("data-recording-history", "");
+      history.open = true;
+
+      const summary = document.createElement("summary");
+      summary.append(document.createTextNode("我的录音 "));
+      const countSpan = document.createElement("span");
+      countSpan.setAttribute("data-recording-count", "");
+      countSpan.textContent = "0";
+      summary.append(countSpan);
+
+      const list = document.createElement("div");
+      list.className = "recording-list";
+      history.append(summary, list);
+
+      const actions = control.closest(".sentence-actions");
+      if (actions) {
+        actions.insertAdjacentElement("afterend", history);
+      } else {
+        card.append(history);
+      }
+    }
+
+    const list = history.querySelector(".recording-list");
+    if (!list) {
+      return;
+    }
+
+    const item = document.createElement("div");
+    item.className = "recording-item";
+    item.setAttribute("data-recording-item", "");
+
+    const meta = document.createElement("div");
+    meta.className = "recording-meta";
+
+    const timestamp = document.createElement("span");
+    timestamp.className = "muted small";
+    timestamp.textContent = payload.created_at_label || "刚刚";
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "recording-delete";
+    deleteButton.type = "button";
+    deleteButton.textContent = "删除";
+    deleteButton.setAttribute("data-delete-recording", "");
+    deleteButton.setAttribute("data-delete-url", payload.delete_url || "");
+    deleteButton.setAttribute("aria-label", "删除这条录音");
+    deleteButton.title = "删除这条录音";
+
+    meta.append(timestamp, deleteButton);
+
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.preload = "none";
+    audio.src = payload.audio_url || "";
+
+    item.append(meta, audio);
+    list.prepend(item);
+
+    const count = history.querySelector("[data-recording-count]");
+    if (count) {
+      if (typeof payload.recording_count === "number") {
+        count.textContent = String(payload.recording_count);
+      } else {
+        const current = Number.parseInt(count.textContent, 10) || 0;
+        count.textContent = String(current + 1);
+      }
+    }
+    history.open = true;
+  }
+
   function cleanupSession(session) {
     if (!session) return;
     if (session.timer) {
@@ -233,13 +325,9 @@
       }
       const wavBlob = await convertToWav(blob, session.audioContext);
       setStatus(control, "正在上传…");
-      await uploadRecording(control, wavBlob);
-      setStatus(control, "上传成功，正在刷新…", "success");
-      const card = control.closest("[id^='sentence-']");
-      if (card) {
-        sessionStorage.setItem("focusDiarySentence", card.id);
-      }
-      window.location.reload();
+      const payload = await uploadRecording(control, wavBlob);
+      addRecordingItem(control, payload);
+      setStatus(control, "上传成功，可以直接播放。", "success");
     } catch (error) {
       setStatus(control, error.message || "录音处理失败，请重试。", "error");
     } finally {
@@ -355,7 +443,9 @@
 
     activeSession = session;
     try {
-      recorder.start(250);
+      // Safari 26 emits empty blobs for small timeslice values. Recording
+      // without a timeslice yields one complete blob when we call stop().
+      recorder.start();
     } catch (_error) {
       cleanupSession(session);
       activeSession = null;
@@ -393,7 +483,12 @@
     sessionStorage.removeItem("focusDiarySentence");
     const target = document.getElementById(focusId);
     if (target) {
-      target.scrollIntoView({ block: "center" });
+      if (document.querySelector("[data-practice-modal]")) {
+        // practice-modal.js runs after this script and reopens the dialog.
+        window.__pendingPracticeSentence = focusId;
+      } else {
+        target.scrollIntoView({ block: "center" });
+      }
     }
   }
 })();

@@ -9,3 +9,13 @@ __pycache__/
 /private_media/
 /staticfiles/
 .pytest_cache/
+
+# Local Android build toolchain, build output, and signing material
+/android-shell/toolchain/
+/android-shell/build/
+/android-shell/keystore/
+*.apk
+
+# Local TTS/phonics audition assets (not part of the running app)
+/static/tts-audition/
+/static/phonics-audition/

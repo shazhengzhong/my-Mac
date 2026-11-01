@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}查词 · 家庭英语日记{% endblock %}
+{% block title %}查词 · 英语口语练习{% endblock %}
 {% block content %}
   <div class="page-heading">
     <div>
@@ -62,14 +62,14 @@
         {% else %}
           <span class="word-surface" lang="en">{{ lookup.display_word }}</span>
         {% endif %}
-        {% if lookup.ipa %}
-          <span class="ipa">/{{ lookup.ipa }}/</span>
+        {% if lookup.display_ipa %}
+          <span class="ipa">/{{ lookup.display_ipa }}/</span>
         {% else %}
-          <span class="ipa unknown">词典未收录音标</span>
+          <span class="ipa unknown">{{ accent_label }}音未收录</span>
         {% endif %}
         {% if lookup.syllables %}
           <span class="syllable-hint">{{ lookup.syllables }}</span>
-        {% elif lookup.ipa %}
+        {% elif lookup.display_ipa %}
           <span class="syllable-hint">单音节</span>
         {% endif %}
         {% if tts.ready %}
@@ -98,5 +98,5 @@
 {% endblock %}
 {% block scripts %}
   <script src="{% static 'js/word-player.js' %}" defer></script>
-  <script src="{% static 'js/word-assessor.js' %}" defer></script>
+  <script src="{% static 'js/word-assessor.js' %}?v=20261028b" defer></script>
 {% endblock %}

@@ -19,6 +19,7 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             VOLCENGINE_APP_ID="",
             VOLCENGINE_ACCESS_TOKEN="",
             VOLCENGINE_TTS_VOICE="",
+            VOLCENGINE_TTS_VOICE_UK="",
             VOLCENGINE_RESOURCE_ID="seed-tts-2.0",
             VOLCENGINE_TTS_SAMPLE_RATE=24_000,
             VOLCENGINE_TTS_NORMAL_SPEECH_RATE=-20,
@@ -30,6 +31,13 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             TENCENT_SOE_APP_ID="",
             TENCENT_SOE_ENGINE="16k_en",
             TENCENT_SOE_SCORE_COEFF=1.0,
+            OCR_PROVIDER="mock",
+            TENCENT_OCR_REGION="ap-guangzhou",
+            TENCENT_OCR_ENDPOINT="ocr.tencentcloudapi.com",
+            TENCENT_OCR_ACTION="GeneralBasicOCR",
+            TENCENT_OCR_VERSION="2018-11-19",
+            TENCENT_OCR_TIMEOUT=30,
+            OCR_DAILY_REQUEST_LIMIT=10,
         )
         self._offline_override.enable()
         super().setup_test_environment(**kwargs)

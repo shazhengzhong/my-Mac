@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_extensions",
     "accounts",
     "diaries",
 ]
@@ -194,11 +195,30 @@ VOLCENGINE_API_KEY = os.getenv("VOLCENGINE_API_KEY", "").strip()
 VOLCENGINE_APP_ID = os.getenv("VOLCENGINE_APP_ID", "").strip()
 VOLCENGINE_ACCESS_TOKEN = os.getenv("VOLCENGINE_ACCESS_TOKEN", "").strip()
 VOLCENGINE_TTS_VOICE = os.getenv("VOLCENGINE_TTS_VOICE", "").strip()
+VOLCENGINE_TTS_VOICE_UK = os.getenv("VOLCENGINE_TTS_VOICE_UK", "").strip()
 VOLCENGINE_RESOURCE_ID = os.getenv("VOLCENGINE_RESOURCE_ID", "seed-tts-2.0").strip()
 VOLCENGINE_TTS_SAMPLE_RATE = env_int("VOLCENGINE_TTS_SAMPLE_RATE", 24_000)
 VOLCENGINE_TTS_NORMAL_SPEECH_RATE = env_int("VOLCENGINE_TTS_NORMAL_SPEECH_RATE", -20)
-VOLCENGINE_TTS_SLOW_SPEECH_RATE = env_int("VOLCENGINE_TTS_SLOW_SPEECH_RATE", -35)
+VOLCENGINE_TTS_SLOW_SPEECH_RATE = env_int("VOLCENGINE_TTS_SLOW_SPEECH_RATE", -25)
 VOLCENGINE_TTS_WORD_SPEECH_RATE = env_int("VOLCENGINE_TTS_WORD_SPEECH_RATE", -20)
+
+# Alibaba Cloud BaiLian / CosyVoice 3.5 Plus.
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "").strip()
+DASHSCOPE_WORKSPACE_ID = os.getenv("DASHSCOPE_WORKSPACE_ID", "").strip()
+COSYVOICE_TTS_MODEL = os.getenv(
+    "COSYVOICE_TTS_MODEL", "cosyvoice-v3.5-plus"
+).strip()
+COSYVOICE_TTS_VOICE_US = os.getenv("COSYVOICE_TTS_VOICE_US", "").strip()
+COSYVOICE_TTS_VOICE_UK = os.getenv("COSYVOICE_TTS_VOICE_UK", "").strip()
+COSYVOICE_TTS_BASE_URL = os.getenv(
+    "COSYVOICE_TTS_BASE_URL", "https://dashscope.aliyuncs.com/api/v1"
+).rstrip("/")
+COSYVOICE_TTS_WS_URL = os.getenv(
+    "COSYVOICE_TTS_WS_URL",
+    "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+).strip()
+COSYVOICE_TTS_SAMPLE_RATE = env_int("COSYVOICE_TTS_SAMPLE_RATE", 24_000)
+COSYVOICE_TTS_TIMEOUT = env_int("COSYVOICE_TTS_TIMEOUT", 60)
 
 TRANSLATION_DAILY_REQUEST_LIMIT = env_int("TRANSLATION_DAILY_REQUEST_LIMIT", 20)
 TTS_DAILY_CHAR_LIMIT = env_int("TTS_DAILY_CHAR_LIMIT", 5000)
@@ -212,6 +232,17 @@ TENCENT_SOE_APP_ID = os.getenv("TENCENT_SOE_APP_ID", "").strip()
 TENCENT_SOE_ENGINE = os.getenv("TENCENT_SOE_ENGINE", "16k_en").strip()
 TENCENT_SOE_SCORE_COEFF = env_float("TENCENT_SOE_SCORE_COEFF", 1.0)
 TENCENT_SOE_TIMEOUT = env_int("TENCENT_SOE_TIMEOUT", 20)
+
+# Photo OCR. Mock by default; Tencent Cloud GeneralBasicOCR when configured.
+OCR_PROVIDER = os.getenv("OCR_PROVIDER", "mock").strip().lower()
+TENCENT_OCR_REGION = os.getenv("TENCENT_OCR_REGION", "ap-guangzhou").strip()
+TENCENT_OCR_ENDPOINT = os.getenv(
+    "TENCENT_OCR_ENDPOINT", "ocr.tencentcloudapi.com"
+).strip()
+TENCENT_OCR_ACTION = os.getenv("TENCENT_OCR_ACTION", "GeneralBasicOCR").strip()
+TENCENT_OCR_VERSION = os.getenv("TENCENT_OCR_VERSION", "2018-11-19").strip()
+TENCENT_OCR_TIMEOUT = env_int("TENCENT_OCR_TIMEOUT", 30)
+OCR_DAILY_REQUEST_LIMIT = env_int("OCR_DAILY_REQUEST_LIMIT", 10)
 
 # The test suite must never reach a paid provider, even when .env enables one.
 TEST_RUNNER = "config.test_runner.OfflineProvidersTestRunner"

@@ -1,20 +1,28 @@
-"""Deterministic CMUdict-based word-level American IPA generation.
+"""Deterministic word-level American and British IPA generation.
 
-The output is broad word-level IPA for display and practice. It intentionally
-does not attempt connected-speech transcription (linking, flapping, reductions).
+American IPA comes from CMUdict via syllabify. British IPA comes from the MIT
+licensed Britfone RP dictionary bundled in ``services/data``. The output is
+broad word-level IPA for display and practice; it does not attempt
+connected-speech transcription (linking, flapping, reductions).
 """
 
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 import re
 
 import pyphen
 from syllabify import syllabify
 
 _PYPHEN = pyphen.Pyphen(lang="en_US")
+_BRITFONE_PATH = (
+    Path(__file__).resolve().parent / "data" / "britfone.main.3.0.1.csv"
+)
 
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)*")
 MAX_IPA_LENGTH = 120
+ACCENT_LABELS = {"us": "美式", "uk": "英式"}
+_IPA_VOWELS = set("aeiouæɑɒɔəɜɪʊʌɐɚ")
 
 _ARPABET_TO_IPA = {
     "AA": "ɑ",
@@ -72,10 +80,69 @@ def normalize_word(word: str) -> str:
     return (word or "").strip().lower().replace("’", "'")
 
 
+def accent_label(accent: str) -> str:
+    return ACCENT_LABELS.get(accent, ACCENT_LABELS["us"])
+
+
+def _normalize_british_ipa(raw: str) -> str:
+    """Turn Britfone's strict phoneme spacing into learner-facing IPA.
+
+    Britfone attaches stress marks to the stressed vowel and uses ɹ/ɐ/ɛ.
+    Learners expect the stress mark at the start of the stressed syllable and
+    the more familiar r/ʌ/e symbols.
+    """
+    ipa = raw.replace(" ", "").translate(
+        str.maketrans({"ɹ": "r", "ɐ": "ʌ", "ɛ": "e"})
+    )
+    output: list[str] = []
+    for char in ipa:
+        if char not in "ˈˌ":
+            output.append(char)
+            continue
+        previous_vowel = None
+        for index, value in enumerate(output):
+            if value in _IPA_VOWELS:
+                previous_vowel = index
+        if previous_vowel is None:
+            position = 0
+        else:
+            position = previous_vowel + 1
+            while position < len(output) and output[position] == "ː":
+                position += 1
+        output.insert(position, char)
+    return "".join(output)
+
+
+@lru_cache(maxsize=1)
+def _britfone() -> dict[str, str]:
+    entries: dict[str, str] = {}
+    if not _BRITFONE_PATH.exists():
+        return entries
+    with _BRITFONE_PATH.open(encoding="utf-8") as dictionary:
+        for line in dictionary:
+            if "," not in line:
+                continue
+            word, raw_ipa = line.split(",", 1)
+            word = normalize_word(word.split("(", 1)[0])
+            word = word.replace("_", " ")
+            if not word or " " in word or not raw_ipa.strip():
+                continue
+            entries.setdefault(
+                word,
+                _normalize_british_ipa(raw_ipa.strip()),
+            )
+    return entries
+
+
 @lru_cache(maxsize=100_000)
-def ipa_for_word(normalized_word: str) -> str | None:
-    """Return broad American IPA without surrounding slashes, or None."""
+def ipa_for_word(normalized_word: str, accent: str = "us") -> str | None:
+    """Return broad IPA without surrounding slashes, or None."""
+    normalized_word = normalize_word(normalized_word)
     if not normalized_word:
+        return None
+    if accent == "uk":
+        return _britfone().get(normalized_word)
+    if accent != "us":
         return None
     try:
         parsed = syllabify(normalized_word)

@@ -54,12 +54,14 @@ def lookup_word(user, query: str) -> WordLookup:
     consume_translation_quota(user, len(cleaned))
     translation = translator.translate_word(cleaned)
     ipa = ipa_for_word(normalized) or ""
+    ipa_uk = ipa_for_word(normalized, "uk") or ""
     syllables = syllable_hint(cleaned)
     try:
         return WordLookup.objects.create(
             word=normalized,
             display_word=cleaned,
             ipa=ipa,
+            ipa_uk=ipa_uk,
             syllables=syllables,
             translation=translation.translation,
             part_of_speech=translation.part_of_speech[:40],
@@ -80,6 +82,10 @@ class TTSQuotaExceeded(Exception):
 
 class AssessmentQuotaExceeded(Exception):
     """The user has reached the configured daily assessment request limit."""
+
+
+class OCRQuotaExceeded(Exception):
+    """The user has reached the configured daily photo OCR request limit."""
 
 
 def consume_translation_quota(user, char_count: int) -> None:
@@ -136,6 +142,59 @@ def consume_assessment_quota(user, word: str) -> None:
         counter.request_count += 1
         counter.char_count += len(word or "")
         counter.save(update_fields=["request_count", "char_count"])
+
+
+def consume_ocr_quota(user) -> None:
+    """Reserve one photo OCR request before making an external paid call."""
+    limit = settings.OCR_DAILY_REQUEST_LIMIT
+    today = timezone.localdate()
+    with transaction.atomic():
+        counter, _ = UsageCounter.objects.select_for_update().get_or_create(
+            user=user,
+            date=today,
+            feature="ocr",
+        )
+        if counter.request_count >= limit:
+            raise OCRQuotaExceeded(
+                f"今天最多识别 {limit} 张照片，请明天再试。"
+            )
+        counter.request_count += 1
+        counter.save(update_fields=["request_count"])
+
+
+def create_ocr_diary(
+    *,
+    owner,
+    pairs: list[TranslationPair],
+    title: str = "",
+    provider_model: str = "",
+):
+    """Create a diary and English version from OCR English/Chinese pairs."""
+    if not pairs:
+        raise ValidationError("识别结果为空，无法生成练习。")
+    chinese_text = "\n".join(
+        (pair.chinese or "").strip() for pair in pairs
+    ).strip()
+    if not chinese_text:
+        raise ValidationError("翻译结果为空，无法生成练习。")
+    cleaned_title = (title or "").strip()
+    if len(cleaned_title) > 100:
+        raise ValidationError("标题不能超过 100 个字符。")
+
+    with transaction.atomic():
+        diary = DiaryEntry.objects.create(
+            owner=owner,
+            entry_date=timezone.localdate(),
+            title=cleaned_title,
+            chinese_text=chinese_text,
+        )
+        version = create_aligned_english_version(
+            diary,
+            pairs,
+            source=EnglishVersion.Source.OCR,
+            provider_model=provider_model,
+        )
+    return diary, version
 
 
 def create_pronunciation_attempt(
@@ -269,6 +328,7 @@ def create_tts_render(
                 model=result.model,
                 cache_key=cache_key,
                 char_count=len(sentence.text),
+                timings=list(result.timings),
             )
     except Exception:
         remove_private_bytes(relative_path)
@@ -320,6 +380,7 @@ def _create_version_with_sentences(
                         ordinal=token_index,
                         surface=token.surface,
                         ipa=token.ipa,
+                        ipa_uk=ipa_for_word(token.normalized, "uk") or "",
                         source=token.source,
                     )
                     for token_index, token in enumerate(tokens)
@@ -382,12 +443,15 @@ def create_diary_read_aloud(
     owner,
     version,
     speed: str,
+    accent: str = "us",
     sentence,
     result,
     timings,
     char_count: int,
 ) -> DiaryReadAloud:
     """Store a private full-diary read-aloud and its word timings atomically."""
+    if accent not in DiaryReadAloud.Accent.values:
+        raise ValueError("Unknown read-aloud accent")
     relative_path, digest, byte_size = write_private_bytes(
         owner_id=owner.pk,
         purpose="diary_tts",
@@ -410,6 +474,7 @@ def create_diary_read_aloud(
                 owner=owner,
                 version=version,
                 speed=speed,
+                accent=accent,
                 audio=asset,
                 provider=result.provider,
                 model=result.model,

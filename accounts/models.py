@@ -53,11 +53,20 @@ class User(AbstractBaseUser, PermissionsMixin):
         OWNER = "owner", "家庭管理员"
         MEMBER = "member", "家庭成员"
 
+    class Accent(models.TextChoices):
+        US = "us", "美音"
+        UK = "uk", "英音"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone = models.CharField(max_length=16, unique=True)
     display_name = models.CharField(max_length=50)
     family = models.ForeignKey(Family, on_delete=models.PROTECT, related_name="members")
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.MEMBER)
+    accent = models.CharField(
+        max_length=2,
+        choices=Accent.choices,
+        default=Accent.US,
+    )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)

@@ -7,6 +7,7 @@ from . import views
 urlpatterns = [
     path("", views.diary_list, name="diary_list"),
     path("new/", views.diary_create, name="diary_create"),
+    path("ocr/", views.ocr_upload, name="ocr_upload"),
     path("<uuid:diary_id>/", views.diary_detail, name="diary_detail"),
     path("<uuid:diary_id>/edit/", views.diary_edit, name="diary_edit"),
     path("<uuid:diary_id>/translate/", views.diary_translate, name="diary_translate"),
@@ -36,7 +37,22 @@ urlpatterns = [
         views.upload_recording,
         name="upload_recording",
     ),
+    path(
+        "recordings/<uuid:recording_id>/delete/",
+        views.delete_recording,
+        name="delete_recording",
+    ),
     path("words/", views.word_lookup, name="word_lookup"),
+    path(
+        "words/lookup/<uuid:lookup_id>/phonics/",
+        views.lookup_phonics,
+        name="lookup_phonics",
+    ),
+    path(
+        "words/lookup/<uuid:lookup_id>/phonics/<str:mode>/",
+        views.lookup_phonics_audio,
+        name="lookup_phonics_audio",
+    ),
     path(
         "words/lookup/<uuid:lookup_id>/tts/",
         views.lookup_tts,
@@ -46,6 +62,16 @@ urlpatterns = [
         "words/lookup/<uuid:lookup_id>/assess/",
         views.assess_lookup,
         name="assess_lookup",
+    ),
+    path(
+        "words/<uuid:token_id>/phonics/",
+        views.word_phonics,
+        name="word_phonics",
+    ),
+    path(
+        "words/<uuid:token_id>/phonics/<str:mode>/",
+        views.word_phonics_audio,
+        name="word_phonics_audio",
     ),
     path(
         "words/<uuid:token_id>/tts/",

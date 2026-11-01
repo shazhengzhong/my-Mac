@@ -10,11 +10,13 @@ import io
 import json
 import math
 import struct
+import time
 import uuid
 import wave
 from typing import Protocol
 
 import httpx
+import websocket
 from django.conf import settings
 
 MOCK_RATE = 16_000
@@ -455,6 +457,393 @@ class VolcengineTTSProvider:
             raise TTSError("暂时无法连接语音服务，请检查网络后再试。") from exc
 
 
+def _normalize_wav_sizes(data: bytes) -> bytes:
+    """Repair streaming WAV placeholder sizes (0x7fffffff) before storage."""
+    if len(data) < 44 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return data
+    data_offset = data.find(b"data", 12)
+    if data_offset < 0 or data_offset + 8 > len(data):
+        return data
+    mutable = bytearray(data)
+    struct.pack_into("<I", mutable, 4, max(0, len(mutable) - 8))
+    struct.pack_into(
+        "<I",
+        mutable,
+        data_offset + 4,
+        max(0, len(mutable) - (data_offset + 8)),
+    )
+    return bytes(mutable)
+
+
+def _wav_duration_ms(data: bytes, sample_rate: int) -> int:
+    try:
+        with wave.open(io.BytesIO(data), "rb") as wav:
+            rate = wav.getframerate() or sample_rate
+            frames = wav.getnframes()
+            block_align = wav.getnchannels() * wav.getsampwidth()
+            actual_frames = max(0, len(data) - 44) // max(1, block_align)
+            if frames <= 0 or frames > actual_frames + 1:
+                frames = actual_frames
+            return max(1, int(round(frames / float(rate) * 1000)))
+    except (wave.Error, EOFError, struct.error):
+        # The service normally returns WAV; keep a safe PCM fallback.
+        if len(data) % 2:
+            data = data[:-1]
+        return max(1, int(round(len(data) / (sample_rate * 2) * 1000)))
+
+
+class CosyVoiceTTSProvider:
+    """Alibaba Cloud BaiLian CosyVoice 3.5 Plus adapter.
+
+    Short word requests use the HTTP endpoint. Sentence/full-diary requests use
+    the duplex WebSocket endpoint with ``word_timestamp_enabled`` so the
+    karaoke timings remain accurate.
+    """
+
+    provider = "cosyvoice"
+    _HTTP_PATH = "/services/audio/tts/SpeechSynthesizer"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        workspace_id: str,
+        model: str,
+        voice: str,
+        base_url: str,
+        ws_url: str,
+        sample_rate: int = 24_000,
+        timeout: int = 60,
+        client: httpx.Client | None = None,
+        connection_factory=None,
+    ):
+        if not api_key:
+            raise TTSError("阿里云语音服务凭据尚未配置。")
+        if not voice:
+            raise TTSError("CosyVoice 音色尚未配置。")
+        if sample_rate != 24_000:
+            raise TTSError("CosyVoice 当前只使用 24 kHz 采样率。")
+        self.api_key = api_key
+        self.workspace_id = workspace_id
+        self.model = model
+        self.voice = voice
+        self.base_url = base_url.rstrip("/")
+        self.ws_url = ws_url
+        self.sample_rate = sample_rate
+        self.timeout = timeout
+        self._client = client
+        self._connection_factory = connection_factory or websocket.create_connection
+
+    def speech_rate(self, speed: str) -> int:
+        # The UI performs its 0.8x slow playback on top of normal-speed audio.
+        # Keep one synthesis rate so cached normal/slow assets stay consistent.
+        return 100
+
+    def _http_headers(self) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        if self.workspace_id:
+            headers["X-DashScope-Workspace"] = self.workspace_id
+        return headers
+
+    def _ws_headers(self) -> list[str]:
+        headers = [f"Authorization: Bearer {self.api_key}"]
+        if self.workspace_id:
+            headers.append(f"X-DashScope-WorkSpace: {self.workspace_id}")
+        return headers
+
+    @staticmethod
+    def _error_message(status_code: int | None, message: str = "") -> str:
+        if status_code in (401, 403):
+            return "阿里云语音服务鉴权失败，请检查 Key 和 Workspace。"
+        if status_code == 429:
+            return "语音服务请求过于频繁，请稍后再试。"
+        if status_code is not None and status_code >= 500:
+            return "语音服务暂时不可用，请稍后再试。"
+        if message:
+            return "语音服务返回错误，请稍后再试。"
+        return "语音服务暂时不可用，请稍后再试。"
+
+    def _http_synthesize(
+        self,
+        client: httpx.Client,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+    ) -> TTSResult:
+        payload = {
+            "model": self.model,
+            "input": {
+                "text": text,
+                "voice": self.voice,
+                "format": "wav",
+                "sample_rate": self.sample_rate,
+                "language_hints": ["en"],
+            },
+        }
+        url = f"{self.base_url}{self._HTTP_PATH}"
+        try:
+            response = client.post(
+                url,
+                headers=self._http_headers(),
+                json=payload,
+                timeout=httpx.Timeout(self.timeout, connect=10.0),
+            )
+            data = response.json() if response.content else {}
+            if response.status_code != 200:
+                raise TTSError(
+                    self._error_message(
+                        response.status_code,
+                        str(data.get("message", "")) if isinstance(data, dict) else "",
+                    )
+                )
+            if not isinstance(data, dict) or data.get("code"):
+                raise TTSError(
+                    self._error_message(
+                        None,
+                        str(data.get("message", "")) if isinstance(data, dict) else "",
+                    )
+                )
+            audio_info = (data.get("output") or {}).get("audio") or {}
+            audio_url = audio_info.get("url")
+            audio_data = audio_info.get("data")
+            if audio_url:
+                audio_response = client.get(
+                    audio_url,
+                    timeout=httpx.Timeout(self.timeout, connect=10.0),
+                )
+                audio_response.raise_for_status()
+                audio = audio_response.content
+            elif isinstance(audio_data, str) and audio_data:
+                audio = base64.b64decode(audio_data)
+            else:
+                raise TTSError("语音服务没有返回音频，请稍后再试。")
+        except TTSError:
+            raise
+        except (httpx.TimeoutException, httpx.HTTPError) as exc:
+            raise TTSError("暂时无法连接阿里云语音服务，请检查网络后再试。") from exc
+        except (ValueError, binascii.Error) as exc:
+            raise TTSError("语音服务返回了无法识别的内容，请稍后再试。") from exc
+
+        if not audio:
+            raise TTSError("语音服务没有返回音频，请稍后再试。")
+        audio = _normalize_wav_sizes(audio)
+        return TTSResult(
+            data=audio,
+            content_type="audio/wav",
+            extension="wav",
+            duration_ms=_wav_duration_ms(audio, self.sample_rate),
+            provider=self.provider,
+            model=self.model,
+            voice=self.voice,
+            style=style,
+        )
+
+    def _ws_synthesize(
+        self,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        enable_subtitles: bool,
+    ) -> TTSResult:
+        task_id = uuid.uuid4().hex
+        run_message = {
+            "header": {
+                "action": "run-task",
+                "task_id": task_id,
+                "streaming": "duplex",
+            },
+            "payload": {
+                "model": self.model,
+                "task_group": "audio",
+                "task": "tts",
+                "function": "SpeechSynthesizer",
+                "input": {},
+                "parameters": {
+                    "voice": self.voice,
+                    "volume": 50,
+                    "text_type": "PlainText",
+                    "sample_rate": self.sample_rate,
+                    "rate": 1.0,
+                    "format": "wav",
+                    "pitch": 1.0,
+                    "seed": 0,
+                    "type": 0,
+                    "word_timestamp_enabled": bool(enable_subtitles),
+                    "language_hints": ["en"],
+                },
+            },
+        }
+        continue_message = {
+            "header": {
+                "action": "continue-task",
+                "task_id": task_id,
+                "streaming": "duplex",
+            },
+            "payload": {
+                "model": self.model,
+                "task_group": "audio",
+                "task": "tts",
+                "function": "SpeechSynthesizer",
+                "input": {"text": text},
+            },
+        }
+        finish_message = {
+            "header": {
+                "action": "finish-task",
+                "task_id": task_id,
+                "streaming": "duplex",
+            },
+            "payload": {"input": {}},
+        }
+
+        audio = bytearray()
+        timings: dict[tuple[str, int, int], dict] = {}
+        started = False
+        sent_text = False
+
+        try:
+            socket = self._connection_factory(
+                self.ws_url,
+                header=self._ws_headers(),
+                timeout=self.timeout,
+            )
+        except Exception as exc:
+            raise TTSError("暂时无法连接阿里云语音服务，请检查网络后再试。") from exc
+
+        try:
+            socket.send(json.dumps(run_message))
+            while True:
+                message = socket.recv()
+                if isinstance(message, (bytes, bytearray)):
+                    audio.extend(message)
+                    continue
+                try:
+                    data = json.loads(message)
+                except (TypeError, ValueError):
+                    continue
+                header = data.get("header") or {}
+                event = header.get("event")
+                if event == "task-started" and not started:
+                    started = True
+                    if not sent_text:
+                        socket.send(json.dumps(continue_message))
+                        socket.send(json.dumps(finish_message))
+                        sent_text = True
+                    continue
+                if event == "task-failed":
+                    message_text = (
+                        header.get("error_message")
+                        or header.get("error_name")
+                        or ""
+                    )
+                    raise TTSError(
+                        self._error_message(None, str(message_text))
+                    )
+                if event == "task-finished":
+                    break
+                if event != "result-generated":
+                    continue
+                sentence = (
+                    (data.get("payload") or {}).get("output") or {}
+                ).get("sentence") or {}
+                for item in sentence.get("words") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    word = item.get("text")
+                    try:
+                        start_ms = int(item["begin_time"])
+                        end_ms = int(item["end_time"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if not isinstance(word, str):
+                        continue
+                    word = word.strip()
+                    if not word or end_ms < start_ms:
+                        continue
+                    timings[(word, start_ms, end_ms)] = {
+                        "word": word,
+                        "start_ms": start_ms,
+                        "end_ms": end_ms,
+                    }
+        except TTSError:
+            raise
+        except websocket.WebSocketTimeoutException as exc:
+            raise TTSError("阿里云语音服务响应超时，请稍后再试。") from exc
+        except (OSError, websocket.WebSocketException) as exc:
+            raise TTSError("暂时无法连接阿里云语音服务，请检查网络后再试。") from exc
+        except (TypeError, ValueError) as exc:
+            raise TTSError("语音服务返回了无法识别的内容，请稍后再试。") from exc
+        finally:
+            try:
+                socket.close()
+            except Exception:
+                pass
+
+        if not started:
+            raise TTSError("阿里云语音服务没有开始合成，请稍后再试。")
+        if not audio:
+            raise TTSError("语音服务没有返回音频，请稍后再试。")
+
+        ordered_timings = tuple(
+            sorted(timings.values(), key=lambda item: (item["start_ms"], item["end_ms"]))
+        )
+        audio_bytes = _normalize_wav_sizes(bytes(audio))
+        return TTSResult(
+            data=audio_bytes,
+            content_type="audio/wav",
+            extension="wav",
+            duration_ms=_wav_duration_ms(audio_bytes, self.sample_rate),
+            provider=self.provider,
+            model=self.model,
+            voice=self.voice,
+            style=style,
+            timings=ordered_timings,
+        )
+
+    def synthesize(
+        self,
+        text: str,
+        *,
+        speed: str,
+        style: str,
+        context_text: str = "",
+        enable_subtitles: bool = False,
+    ) -> TTSResult:
+        if not text or not text.strip():
+            raise TTSError("没有可朗读的文字。")
+        if enable_subtitles:
+            return self._ws_synthesize(
+                text,
+                speed=speed,
+                style=style,
+                enable_subtitles=enable_subtitles,
+            )
+        if self._client is not None:
+            return self._http_synthesize(
+                self._client,
+                text,
+                speed=speed,
+                style=style,
+            )
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(self.timeout, connect=10.0)
+            ) as client:
+                return self._http_synthesize(
+                    client,
+                    text,
+                    speed=speed,
+                    style=style,
+                )
+        except httpx.HTTPError as exc:
+            raise TTSError("暂时无法连接阿里云语音服务，请检查网络后再试。") from exc
+
+
 WORD_TTS_CONTEXTS = {
     "i'm": "I'm going home now.",
     "they": "They are my friends.",
@@ -485,12 +874,31 @@ def tts_cache_key(
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
-def get_tts_provider() -> TTSProvider:
+def get_tts_provider(accent: str = "us") -> TTSProvider:
     provider = settings.TTS_PROVIDER
     if provider == "mock":
         return MockTTSProvider()
+    if provider == "cosyvoice":
+        voice = settings.COSYVOICE_TTS_VOICE_US
+        if accent == "uk":
+            voice = settings.COSYVOICE_TTS_VOICE_UK or voice
+        if not settings.DASHSCOPE_API_KEY:
+            raise TTSError("阿里云语音服务凭据尚未配置。")
+        return CosyVoiceTTSProvider(
+            api_key=settings.DASHSCOPE_API_KEY,
+            workspace_id=settings.DASHSCOPE_WORKSPACE_ID,
+            model=settings.COSYVOICE_TTS_MODEL,
+            voice=voice,
+            base_url=settings.COSYVOICE_TTS_BASE_URL,
+            ws_url=settings.COSYVOICE_TTS_WS_URL,
+            sample_rate=settings.COSYVOICE_TTS_SAMPLE_RATE,
+            timeout=settings.COSYVOICE_TTS_TIMEOUT,
+        )
     if provider == "volcengine":
-        if not settings.VOLCENGINE_TTS_VOICE:
+        voice = settings.VOLCENGINE_TTS_VOICE
+        if accent == "uk":
+            voice = settings.VOLCENGINE_TTS_VOICE_UK or voice
+        if not voice:
             raise TTSError("真实语音尚未配置音色（VOLCENGINE_TTS_VOICE）。")
         if not settings.VOLCENGINE_API_KEY and not (
             settings.VOLCENGINE_APP_ID and settings.VOLCENGINE_ACCESS_TOKEN
@@ -501,7 +909,7 @@ def get_tts_provider() -> TTSProvider:
             app_id=settings.VOLCENGINE_APP_ID,
             access_token=settings.VOLCENGINE_ACCESS_TOKEN,
             resource_id=settings.VOLCENGINE_RESOURCE_ID,
-            voice=settings.VOLCENGINE_TTS_VOICE,
+            voice=voice,
             sample_rate=settings.VOLCENGINE_TTS_SAMPLE_RATE,
             normal_speech_rate=settings.VOLCENGINE_TTS_NORMAL_SPEECH_RATE,
             slow_speech_rate=settings.VOLCENGINE_TTS_SLOW_SPEECH_RATE,
