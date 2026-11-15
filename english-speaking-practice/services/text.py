@@ -77,3 +77,25 @@ def split_chinese_sentences(text: str) -> list[str]:
     if len(cleaned) > MAX_SENTENCES:
         raise ValidationError(f"中文句子过多，最多支持 {MAX_SENTENCES} 句。")
     return cleaned
+
+
+def chinese_paragraph_indices(text: str) -> list[int]:
+    """Map each Chinese sentence to its source line/paragraph.
+
+    Existing English versions store only sentence groups, so this derives a
+    stable paragraph grouping from the original diary text without a database
+    migration. Blank lines are ignored; each non-empty source line is a
+    paragraph, and multiple sentences on one line stay together.
+    """
+    normalized = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    indices: list[int] = []
+    paragraph_index = 0
+    for raw_line in normalized.split("\n"):
+        if not raw_line.strip():
+            continue
+        line_sentences = split_chinese_sentences(raw_line)
+        if not line_sentences:
+            continue
+        indices.extend([paragraph_index] * len(line_sentences))
+        paragraph_index += 1
+    return indices

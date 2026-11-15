@@ -61,18 +61,25 @@
       <div class="full-english-heading">
         <div>
           <p class="eyebrow">阅读</p>
-          <h2>全英文</h2>
-          <p class="muted small">全文朗读会逐词高亮；点击任意单词查看释义。</p>
+          <h2>阅读</h2>
+          <p class="muted small">可切换全中文/全英文；全英文朗读会逐词高亮，点击单词查看释义。</p>
         </div>
-        <button
-          class="full-english-toggle"
-          type="button"
-          data-full-english-toggle
-          aria-expanded="true"
-        >收起</button>
+        <div class="full-english-heading-actions">
+          <div class="view-toggle reading-mode-toggle" role="group" aria-label="阅读语言">
+            <button class="view-toggle-button" type="button" data-reading-mode="zh" aria-pressed="false">全中文</button>
+            <button class="view-toggle-button" type="button" data-reading-mode="en" aria-pressed="true">全英文</button>
+          </div>
+          <button
+            class="full-english-toggle"
+            type="button"
+            data-full-english-toggle
+            aria-expanded="true"
+          >收起</button>
+        </div>
       </div>
 
       <div class="full-english-body" data-full-english-body>
+        <div data-reading-en>
         <div
           class="read-aloud-control"
           data-read-aloud
@@ -94,10 +101,10 @@
         </div>
 
         <div class="full-english-text">
-          {% if bilingual_groups %}
-            {% for group in bilingual_groups %}
+          {% if english_paragraphs %}
+            {% for paragraph in english_paragraphs %}
               <p class="full-english-line karaoke-line" lang="en">
-                {% for sentence in group.sentences %}
+                {% for sentence in paragraph %}
                   {% include "diaries/_word_line.html" with sentence=sentence word_class="full-english-word" %}{% if not forloop.last %} {% endif %}
                 {% endfor %}
               </p>
@@ -111,6 +118,11 @@
           {% else %}
             <p class="full-english-line" lang="en">{{ current.english_text|linebreaksbr }}</p>
           {% endif %}
+        </div>
+        </div>
+
+        <div class="full-chinese-text" data-reading-zh hidden>
+          {{ diary.chinese_text|linebreaksbr }}
         </div>
       </div>
     </section>
@@ -247,10 +259,10 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="{% static 'js/word-assessor.js' %}?v=20261115d" defer></script>
+  <script src="{% static 'js/word-assessor.js' %}?v=20261115f" defer></script>
   <script src="{% static 'js/read-aloud.js' %}?v=20261115a" defer></script>
   <script src="{% static 'js/diary-reader.js' %}?v=20261115a" defer></script>
   <script src="{% static 'js/recording-delete.js' %}?v=20261101b" defer></script>
-  <script src="{% static 'js/word-card.js' %}?v=20261115e" defer></script>
-  <script src="{% static 'js/full-english.js' %}?v=20261115a" defer></script>
+  <script src="{% static 'js/word-card.js' %}?v=20261115g" defer></script>
+  <script src="{% static 'js/full-english.js' %}?v=20261115c" defer></script>
 {% endblock %}

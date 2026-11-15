@@ -51,7 +51,7 @@ def lookup_word(user, query: str) -> WordLookup:
         return existing
 
     translator = get_translator()
-    consume_translation_quota(user, len(cleaned))
+    consume_word_lookup_quota(user, len(cleaned))
     translation = translator.translate_word(cleaned)
     ipa = ipa_for_word(normalized) or ""
     ipa_uk = ipa_for_word(normalized, "uk") or ""
@@ -81,7 +81,7 @@ def ensure_word_senses(user, lookup: WordLookup) -> str:
     if lookup.senses:
         return ""
     translator = get_translator()
-    consume_translation_quota(user, len(lookup.display_word))
+    consume_word_lookup_quota(user, len(lookup.display_word))
     translation = translator.translate_word(lookup.display_word)
     senses = [
         {"pos": sense.pos, "meaning": sense.meaning}
@@ -117,6 +117,10 @@ class TranslationQuotaExceeded(Exception):
     """The user has reached the configured daily translation request limit."""
 
 
+class WordLookupQuotaExceeded(Exception):
+    """The user has reached the configured daily word lookup limit."""
+
+
 class TTSQuotaExceeded(Exception):
     """The user has reached the configured daily TTS character limit."""
 
@@ -142,6 +146,25 @@ def consume_translation_quota(user, char_count: int) -> None:
         if counter.request_count >= limit:
             raise TranslationQuotaExceeded(
                 f"今天最多翻译 {limit} 次，请明天再试。"
+            )
+        counter.request_count += 1
+        counter.char_count += max(0, char_count)
+        counter.save(update_fields=["request_count", "char_count"])
+
+
+def consume_word_lookup_quota(user, char_count: int) -> None:
+    """Reserve one word lookup; word clicks should not exhaust diary translation quota."""
+    limit = settings.WORD_LOOKUP_DAILY_REQUEST_LIMIT
+    today = timezone.localdate()
+    with transaction.atomic():
+        counter, _ = UsageCounter.objects.select_for_update().get_or_create(
+            user=user,
+            date=today,
+            feature="word_lookup",
+        )
+        if counter.request_count >= limit:
+            raise WordLookupQuotaExceeded(
+                f"今天最多查词 {limit} 次，请明天再试。"
             )
         counter.request_count += 1
         counter.char_count += max(0, char_count)

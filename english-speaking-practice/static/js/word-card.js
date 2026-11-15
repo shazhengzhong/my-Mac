@@ -264,7 +264,7 @@
     if (!data.senses.length) {
       const empty = document.createElement("p");
       empty.className = "word-sheet-empty";
-      empty.textContent = "暂时没有查到中文释义。";
+      empty.textContent = data.warning || "暂时没有查到中文释义。";
       sensesElement.appendChild(empty);
       return;
     }
@@ -527,6 +527,13 @@
   playButton.addEventListener("click", () => {
     void playWord({ autoplay: true });
   });
+
+  if (assessButton) {
+    assessButton.addEventListener("click", () => {
+      audio.pause();
+      setLoop(false);
+    });
+  }
 
   loopButton.addEventListener("click", () => {
     const next = !loop;

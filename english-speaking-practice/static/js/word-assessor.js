@@ -10,6 +10,7 @@
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   let activeSession = null;
   let feedbackContext = null;
+  let assessmentPlayer = null;
 
   function ensureFeedbackContext() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -53,11 +54,11 @@
     const run = () => {
       const now = context.currentTime + 0.02;
       if (score < 70) {
-        tone(context, 220, now, 0.2, 0.05);
-        tone(context, 174, now + 0.24, 0.28, 0.05);
+        tone(context, 220, now, 0.2, 0.08);
+        tone(context, 174, now + 0.24, 0.28, 0.08);
       } else {
-        tone(context, 660, now, 0.12, 0.04);
-        tone(context, 880, now + 0.15, 0.18, 0.04);
+        tone(context, 660, now, 0.12, 0.07);
+        tone(context, 880, now + 0.15, 0.18, 0.07);
       }
     };
     if (context.state === "suspended") {
@@ -95,13 +96,35 @@
       delete result.dataset.kind;
     }
     if (audioUrl) {
-      const link = document.createElement("a");
-      link.href = audioUrl;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.className = "assess-play";
-      link.textContent = " 回放";
-      result.appendChild(link);
+      if (button.dataset.scoreOnly === "true") {
+        const play = document.createElement("button");
+        play.type = "button";
+        play.className = "assess-play-button";
+        play.setAttribute("aria-label", "播放我的录音");
+        play.title = "播放我的录音";
+        play.innerHTML =
+          '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+          '<path d="M8 5v14l11-7z" fill="currentColor"></path>' +
+          "</svg>";
+        play.addEventListener("click", () => {
+          if (assessmentPlayer) {
+            assessmentPlayer.pause();
+          }
+          assessmentPlayer = new Audio(audioUrl);
+          assessmentPlayer.play().catch(() => {
+            setResult(button, "录音播放失败，请重试。", "error");
+          });
+        });
+        result.appendChild(play);
+      } else {
+        const link = document.createElement("a");
+        link.href = audioUrl;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.className = "assess-play";
+        link.textContent = " 回放";
+        result.appendChild(link);
+      }
     }
   }
 
@@ -255,6 +278,7 @@
             button,
             `${Math.round(score)} 分`,
             score < 70 ? "warning" : "success",
+            payload.audio_url || "",
           );
           playScoreTone(score);
         } else {

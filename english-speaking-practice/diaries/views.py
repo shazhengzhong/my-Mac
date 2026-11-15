@@ -45,6 +45,7 @@ from services.phonics import (
 )
 from services.pronunciation import accent_label, normalize_word, syllable_hint
 from services.translation import TranslationError, get_translator
+from services.text import chinese_paragraph_indices
 from services.tts import (
     TTSError,
     TTSResult,
@@ -72,6 +73,7 @@ from .services import (
     OCRQuotaExceeded,
     TTSQuotaExceeded,
     TranslationQuotaExceeded,
+    WordLookupQuotaExceeded,
     consume_assessment_quota,
     consume_ocr_quota,
     consume_translation_quota,
@@ -471,6 +473,30 @@ def diary_detail(request, diary_id):
         else:
             previous_chinese_ordinal = None
 
+    paragraph_indices = (
+        chinese_paragraph_indices(diary.chinese_text)
+        if has_aligned_chinese
+        else []
+    )
+    english_paragraphs: list[list[Sentence]] = []
+    current_paragraph_index = None
+    for sentence in sentences:
+        source_index = sentence.chinese_ordinal
+        if (
+            source_index is not None
+            and 0 <= source_index < len(paragraph_indices)
+        ):
+            paragraph_index = paragraph_indices[source_index]
+        else:
+            paragraph_index = 0
+        if (
+            not english_paragraphs
+            or paragraph_index != current_paragraph_index
+        ):
+            english_paragraphs.append([])
+            current_paragraph_index = paragraph_index
+        english_paragraphs[-1].append(sentence)
+
     return render(
         request,
         "diaries/detail.html",
@@ -478,6 +504,7 @@ def diary_detail(request, diary_id):
             "diary": diary,
             "current": current,
             "sentences": sentences,
+            "english_paragraphs": english_paragraphs,
             "previous_count": previous_count,
             "has_aligned_chinese": has_aligned_chinese,
             "bilingual_groups": bilingual_groups,
@@ -843,12 +870,21 @@ def word_card(request, token_id):
     if lookup is None:
         try:
             lookup = lookup_word(request.user, token.surface)
-        except (ValidationError, TranslationQuotaExceeded, TranslationError) as exc:
+        except (
+            ValidationError,
+            WordLookupQuotaExceeded,
+            TranslationQuotaExceeded,
+            TranslationError,
+        ) as exc:
             warning = str(exc)
     elif not lookup.senses:
         try:
             warning = ensure_word_senses(request.user, lookup)
-        except (TranslationQuotaExceeded, TranslationError) as exc:
+        except (
+            WordLookupQuotaExceeded,
+            TranslationQuotaExceeded,
+            TranslationError,
+        ) as exc:
             warning = str(exc)
 
     senses = []
@@ -1596,7 +1632,7 @@ def word_lookup(request):
             lookup = lookup_word(request.user, query)
         except ValidationError as exc:
             error = "；".join(exc.messages)
-        except TranslationQuotaExceeded as exc:
+        except (WordLookupQuotaExceeded, TranslationQuotaExceeded) as exc:
             error = str(exc)
         except TranslationError as exc:
             error = str(exc)

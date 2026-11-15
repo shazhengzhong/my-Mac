@@ -54,7 +54,11 @@ from services.pronunciation import (
     ipa_for_word,
     syllable_hint,
 )
-from services.text import split_chinese_sentences, split_english_sentences
+from services.text import (
+    chinese_paragraph_indices,
+    split_chinese_sentences,
+    split_english_sentences,
+)
 from services.translation import (
     DeepSeekTranslator,
     MockTranslator,
@@ -89,6 +93,7 @@ from .models import (
 )
 from .services import (
     TranslationQuotaExceeded,
+    WordLookupQuotaExceeded,
     create_aligned_english_version,
     create_english_version,
     lookup_word,
@@ -208,6 +213,20 @@ class TextServiceTests(TestCase):
 
     def test_empty_text(self):
         self.assertEqual(split_english_sentences(" \n "), [])
+
+    def test_chinese_paragraph_indices_follow_source_lines(self):
+        self.assertEqual(
+            chinese_paragraph_indices("第一句。第二句。\n第三句。"),
+            [0, 0, 1],
+        )
+        self.assertEqual(
+            chinese_paragraph_indices("第一句。\n\n第二句。"),
+            [0, 1],
+        )
+        self.assertEqual(
+            chinese_paragraph_indices("第一句。第二句。"),
+            [0, 0],
+        )
 
     def test_split_chinese_sentences_keeps_punctuation_and_ellipsis(self):
         text = "今天天气很好。我和家人去公园散步。\n晚上看电视！他说……后来呢？"
@@ -670,6 +689,29 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
         self.assertNotContains(detail, 'data-view-mode=')
         self.assertNotContains(detail, "data-practice-modal")
         self.assertNotContains(detail, "bilingual-group-link")
+
+    def test_full_english_uses_source_line_paragraphs(self):
+        diary = make_diary(
+            self.owner,
+            chinese_text="第一句。第二句。\n第三句。",
+        )
+        create_aligned_english_version(
+            diary,
+            [
+                TranslationPair("第一句。", "One."),
+                TranslationPair("第二句。", "Two."),
+                TranslationPair("第三句。", "Three."),
+            ],
+            source="manual",
+        )
+        response = self.client.get(reverse("diary_detail", args=[diary.id]))
+        self.assertContains(
+            response,
+            'class="full-english-line karaoke-line"',
+            count=2,
+        )
+        self.assertContains(response, 'data-reading-mode="zh"')
+        self.assertContains(response, 'data-reading-mode="en"')
 
     def test_aligned_version_stores_grouped_sentences(self):
         diary = make_diary(self.owner)
@@ -2410,7 +2452,7 @@ class WordLookupServiceTests(DiaryFixtureMixin, TestCase):
         self.assertIn("模拟释义", lookup.translation)
         self.assertTrue(lookup.senses)
 
-        counter = UsageCounter.objects.get(user=self.owner, feature="translation")
+        counter = UsageCounter.objects.get(user=self.owner, feature="word_lookup")
         self.assertEqual(counter.request_count, 1)
 
         again = lookup_word(self.owner, "Water")
@@ -2424,9 +2466,9 @@ class WordLookupServiceTests(DiaryFixtureMixin, TestCase):
         with self.assertRaises(ValidationError):
             lookup_word(self.owner, "hello world")
 
-    @override_settings(TRANSLATION_DAILY_REQUEST_LIMIT=0)
+    @override_settings(WORD_LOOKUP_DAILY_REQUEST_LIMIT=0)
     def test_lookup_word_quota_blocks_new_word(self):
-        with self.assertRaises(TranslationQuotaExceeded):
+        with self.assertRaises(WordLookupQuotaExceeded):
             lookup_word(self.owner, "water")
         self.assertFalse(WordLookup.objects.exists())
 
@@ -2454,7 +2496,7 @@ class WordLookupPageTests(DiaryFixtureMixin, TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(WordLookup.objects.count(), 1)
-        counter = UsageCounter.objects.get(user=self.owner, feature="translation")
+        counter = UsageCounter.objects.get(user=self.owner, feature="word_lookup")
         self.assertEqual(counter.request_count, 1)
 
     def test_lookup_page_shows_error_for_invalid_word(self):
@@ -2471,7 +2513,7 @@ class WordLookupPageTests(DiaryFixtureMixin, TestCase):
         self.assertContains(response, "water")
         self.assertEqual(WordLookup.objects.count(), 1)
         counter = UsageCounter.objects.get(
-            user=self.owner, feature="translation"
+            user=self.owner, feature="word_lookup"
         )
         self.assertEqual(counter.request_count, 1)
 
@@ -3329,7 +3371,7 @@ class WordCardTests(AudioTestBase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(WordLookup.objects.count(), 1)
         counter = UsageCounter.objects.get(
-            user=self.owner, feature="translation"
+            user=self.owner, feature="word_lookup"
         )
         self.assertEqual(counter.request_count, 1)
 
@@ -3352,7 +3394,7 @@ class WordCardTests(AudioTestBase):
         self.assertTrue(old.senses)
         self.assertIn("模拟释义", response.json()["senses"][0]["meaning"])
 
-    @override_settings(TRANSLATION_DAILY_REQUEST_LIMIT=0)
+    @override_settings(WORD_LOOKUP_DAILY_REQUEST_LIMIT=0)
     def test_word_card_keeps_audio_available_when_lookup_quota_is_exhausted(self):
         token = self._water_token()
         response = self.client.post(reverse("word_card", args=[token.id]))

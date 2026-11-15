@@ -1860,7 +1860,8 @@ body.word-sheet-open {
 
 .full-english-text .karaoke-word.karaoke-done,
 .practice-en .karaoke-word.karaoke-done {
-  color: #63877a;
+  color: inherit;
+  background: transparent;
 }
 
 .word-sheet-panel {
@@ -2032,5 +2033,64 @@ body.word-sheet-open {
 
   .word-sheet-assess .assess-result {
     font-size: 1.18rem;
+  }
+}
+
+.word-sheet-assess .assess-play-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.word-sheet-assess .assess-play-button:hover,
+.word-sheet-assess .assess-play-button:focus-visible {
+  background: #dbeafe;
+  outline: none;
+}
+
+.word-sheet-assess .assess-play-button .icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.full-english-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.full-chinese-text {
+  color: #344054;
+  font-size: 1.05rem;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.full-chinese-text br {
+  display: block;
+  content: "";
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 700px) {
+  .full-english-heading-actions {
+    justify-content: flex-start;
+  }
+
+  .reading-mode-toggle {
+    order: 2;
   }
 }
