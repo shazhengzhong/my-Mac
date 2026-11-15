@@ -41,8 +41,9 @@ from services.phonics import (
     generate_phoneme_audio,
     phonics_for_word,
     syllable_audio_text,
+    syllables_for_word,
 )
-from services.pronunciation import accent_label, syllable_hint
+from services.pronunciation import accent_label, normalize_word, syllable_hint
 from services.translation import TranslationError, get_translator
 from services.tts import (
     TTSError,
@@ -82,6 +83,7 @@ from .services import (
     create_recording,
     create_tts_render,
     create_word_tts_render,
+    ensure_word_senses,
     lookup_word,
 )
 
@@ -826,6 +828,167 @@ def generate_sentence_tts(request, sentence_id, speed):
 @login_required
 @require_POST
 @never_cache
+@login_required
+@require_POST
+@never_cache
+def word_card(request, token_id):
+    """Return the dictionary card for a diary word, creating senses on demand."""
+    token = _owned_token(request, token_id)
+    warning = ""
+    lookup = WordLookup.objects.filter(
+        word=normalize_word(token.surface)
+    ).first()
+
+    if lookup is None:
+        try:
+            lookup = lookup_word(request.user, token.surface)
+        except (ValidationError, TranslationQuotaExceeded, TranslationError) as exc:
+            warning = str(exc)
+    elif not lookup.senses:
+        try:
+            warning = ensure_word_senses(request.user, lookup)
+        except (TranslationQuotaExceeded, TranslationError) as exc:
+            warning = str(exc)
+
+    senses = []
+    if lookup is not None:
+        senses = [
+            {
+                "pos": str(item.get("pos") or "").strip(),
+                "meaning": str(item.get("meaning") or "").strip(),
+            }
+            for item in (lookup.senses or [])
+            if isinstance(item, dict) and str(item.get("meaning") or "").strip()
+        ]
+        if not senses and lookup.translation.strip():
+            senses = [
+                {
+                    "pos": lookup.part_of_speech.strip(),
+                    "meaning": lookup.translation.strip(),
+                }
+            ]
+
+    accent = request.user.accent
+    syllables = list(syllables_for_word(token.surface))
+    tts = _tts_status()
+    assessment = _assessment_status()
+    syllable_audio_urls = []
+    syllable_sequence_url = ""
+    if tts["ready"]:
+        syllable_audio_urls = [
+            reverse("word_syllable_audio", args=[token.id, index])
+            for index in range(len(syllables))
+        ]
+        syllable_sequence_url = reverse(
+            "word_phonics_audio",
+            args=[token.id, "syllable"],
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "word": token.surface,
+            "ipa": (token.ipa_uk if accent == "uk" else token.ipa) or "",
+            "syllables": syllables,
+            "senses": senses,
+            "warning": warning,
+            "tts_ready": tts["ready"],
+            "assessment_ready": assessment["ready"],
+            "word_tts_url": reverse("word_tts", args=[token.id]),
+            "assess_url": reverse("assess_word", args=[token.id]),
+            "syllable_audio_urls": syllable_audio_urls,
+            "syllable_sequence_url": syllable_sequence_url,
+        }
+    )
+
+
+@login_required
+@require_POST
+@never_cache
+def word_syllable_audio(request, token_id, index):
+    """Synthesize one written syllable for the word card."""
+    token = _owned_token(request, token_id)
+    data = phonics_for_word(token.surface, request.user.accent)
+    if index < 0 or index >= len(data.syllables):
+        return JsonResponse(
+            {"ok": False, "error": "这个音节不存在。"},
+            status=400,
+        )
+
+    try:
+        provider = get_tts_provider(data.accent)
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
+
+    text = data.syllables[index]
+    cache_key = tts_cache_key(
+        provider=provider.provider,
+        model=provider.model,
+        voice=provider.voice,
+        style="phonics_syllable_part",
+        speed="word",
+        rate=provider.speech_rate("word"),
+        text=text,
+        context=f"{data.accent}:{data.normalized_word}:{index}:v1",
+    )
+    existing = (
+        WordTtsRender.objects.filter(
+            owner=request.user,
+            cache_key=cache_key,
+        )
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return JsonResponse(
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset",
+                    args=[existing.audio_id],
+                ),
+                "cached": True,
+                "duration_ms": existing.audio.duration_ms,
+            }
+        )
+
+    try:
+        consume_tts_quota(request.user, len(text))
+        result = provider.synthesize(
+            text,
+            speed="word",
+            style="natural",
+        )
+        render = create_word_tts_render(
+            owner=request.user,
+            sentence=token.sentence,
+            word=token.surface,
+            result=result,
+            cache_key=cache_key,
+        )
+    except TTSQuotaExceeded as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
+    except TTSError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    except Exception:
+        return JsonResponse(
+            {"ok": False, "error": "音节发音生成失败，请稍后再试。"},
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "audio_url": reverse("serve_audio_asset", args=[render.audio_id]),
+            "cached": False,
+            "duration_ms": result.duration_ms,
+        }
+    )
+
+
+@login_required
+@require_POST
+@never_cache
 def word_tts(request, token_id):
     token = _owned_token(request, token_id)
     try:
@@ -1250,9 +1413,14 @@ def _phonics_audio_response(request, *, token=None, lookup=None, mode):
 
     display_word = token.surface if token is not None else lookup.display_word
     data = phonics_for_word(display_word, request.user.accent)
-    if not data.phonemes:
+    if mode == "phoneme" and not data.phonemes:
         return JsonResponse(
-            {"ok": False, "error": "这个单词还没有可用的拼读数据。"},
+            {"ok": False, "error": "这个单词还没有可用的音素数据。"},
+            status=400,
+        )
+    if mode == "syllable" and not data.syllables:
+        return JsonResponse(
+            {"ok": False, "error": "这个单词还没有可用的音节数据。"},
             status=400,
         )
     target_kwargs = (

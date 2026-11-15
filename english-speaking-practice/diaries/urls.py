@@ -74,6 +74,16 @@ urlpatterns = [
         name="word_phonics_audio",
     ),
     path(
+        "words/<uuid:token_id>/card/",
+        views.word_card,
+        name="word_card",
+    ),
+    path(
+        "words/<uuid:token_id>/syllable/<int:index>/",
+        views.word_syllable_audio,
+        name="word_syllable_audio",
+    ),
+    path(
         "words/<uuid:token_id>/tts/",
         views.word_tts,
         name="word_tts",

@@ -125,7 +125,7 @@
 
   function collectSpans() {
     spans = Array.from(
-      document.querySelectorAll(".bilingual-list .karaoke-word"),
+      document.querySelectorAll(".full-english-text .karaoke-word"),
     );
   }
 
@@ -165,7 +165,7 @@
     timings = [];
     spans = [];
     document
-      .querySelectorAll(".bilingual-list .karaoke-word")
+      .querySelectorAll(".full-english-text .karaoke-word")
       .forEach((span) => {
         span.classList.remove("karaoke-active", "karaoke-done");
       });

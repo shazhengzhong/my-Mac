@@ -8,7 +8,7 @@
 - 当前应用名：**英语口语练习**；PWA 短名称：**口语练习**。
 - 这个目录不是 git 仓库。不要假设有版本控制；不要删除日记、录音、`private_media`、`.env`、`.bak` 或旧的 APK，除非用户明确要求。
 
-## 当前实际状态（2026-11-01）
+## 当前实际状态（2026-11-15）
 
 ### 界面
 
@@ -16,6 +16,9 @@
 - 视觉方向：近白底 + 轻蓝/轻粉/薄荷渐变，白卡片，蓝色主色，珊瑚/琥珀/薄荷/紫色点缀；按钮小而简洁，间距紧凑。
 - 手机端顶部导航隐藏重复的「首页 / 邀请家人 / 成员」入口，这些入口仍在首页卡片中。
 - 当前图标：方案 **08 双语气泡**（白底，蓝色大气泡 + 珊瑚色小气泡）。
+- 日记详情页：上方“全英文”卡片（默认展开、可收起，全文正常/慢速朗读、逐词高亮、单词可点）；下方“中英对照”卡片（每句正常/慢读 + 整句录音 + 录音历史，单词可点）。
+- 正文不显示音标；点击单词从底部弹出半屏单词卡，卡内显示音标、词性/释义、单词发音/循环、单词录音测评、音节播放，支持向下滑关闭。
+- 旧的独立练习弹层和正文音标已移除；`view-mode` 切换也已移除。
 - 图标预览页：`static/icon-options/index.html`。
 - PWA / 苹果主屏 / favicon / Android 图标都在 `static/icons/`，Android 壳图标在 `android-shell/res/mipmap-xxxhdpi/ic_launcher.png`。
 
@@ -26,7 +29,9 @@
 - 单词/句子/全文/查词/慢速朗读都走 `get_tts_provider`，当前全部使用 CosyVoice。
 - 单词发音使用普通文本，不使用 CMU 音素。
 - 单词测评：腾讯云 SOE；拍照 OCR：腾讯云 OCR；Key 只在 `.env`。
-- 自然拼读/音节拼读的旧后端和页面还在，但没有 UI 入口，音质不合格，**不要再把它接到用户界面**，除非用户重新明确要求并接受新的音源方案。
+- 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒并消耗翻译额度。
+- 中文释义朗读：网页端用系统 `speechSynthesis`；Android 壳 APK 1.7 通过 `AndroidTts` 原生桥接华为系统 TTS。
+- 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
 
 ### 运行与验证
 
@@ -36,11 +41,11 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-- 目前测试数：212 个，全部通过。
+- 目前测试数：221 个，全部通过。
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.4:8443/`
-- Android WebView 壳 APK：`static/family-diary-1.6.apk`（版本 1.6，versionCode 7）。
+- Android WebView 壳 APK：`static/family-diary-1.7.apk`（版本 1.7，versionCode 8；包含中文 TTS 原生桥接）。
 
 ### 文档提醒
 

@@ -147,6 +147,7 @@ class WordLookup(models.Model):
     syllables = models.CharField(max_length=255, blank=True, default="")
     translation = models.TextField()
     part_of_speech = models.CharField(max_length=40, blank=True, default="")
+    senses = models.JSONField(default=list, blank=True)
     provider = models.CharField(max_length=40)
     model = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)

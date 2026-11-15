@@ -300,6 +300,8 @@ class TranslationServiceTests(TestCase):
     def test_mock_translator_returns_word_translation(self):
         result = MockTranslator().translate_word("water")
         self.assertIn("water", result.translation)
+        self.assertEqual(len(result.senses), 1)
+        self.assertIn("water", result.senses[0].meaning)
 
     def test_deepseek_word_request_shape_and_response(self):
         captured = {}
@@ -343,6 +345,45 @@ class TranslationServiceTests(TestCase):
             "English-Chinese dictionary",
             captured["payload"]["messages"][0]["content"],
         )
+
+    def test_deepseek_word_senses_are_structured(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "senses": [
+                                            {"pos": "adj.", "meaning": "右边的；正确的"},
+                                            {"pos": "n.", "meaning": "权利；右边"},
+                                        ]
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+
+        translator = DeepSeekTranslator(
+            api_key="test-key",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            client=httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+        result = translator.translate_word("right")
+        self.assertEqual(
+            [(sense.pos, sense.meaning) for sense in result.senses],
+            [("adj.", "右边的；正确的"), ("n.", "权利；右边")],
+        )
+        self.assertEqual(result.part_of_speech, "adj.")
+        self.assertIn("adj. 右边的；正确的", result.translation)
+        self.assertIn("n. 权利；右边", result.translation)
 
     def test_deepseek_pair_request_shape_and_response(self):
         captured = {}
@@ -594,7 +635,8 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
 
         detail = self.client.get(reverse("diary_detail", args=[diary.id]))
         self.assertContains(detail, "模拟翻译模式")
-        self.assertContains(detail, "ˈ")
+        self.assertContains(detail, "data-word-card-url")
+        self.assertNotContains(detail, "word-ipa")
 
     def test_mock_translation_creates_chinese_alignment(self):
         diary = make_diary(self.owner)
@@ -609,25 +651,24 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
         )
 
         detail = self.client.get(reverse("diary_detail", args=[diary.id]))
-        self.assertContains(detail, "日记对照")
+        self.assertContains(detail, "全英文")
+        self.assertContains(detail, "中英对照")
         self.assertContains(detail, "Today")
         self.assertContains(detail, "Chinese.")
-        self.assertContains(detail, 'data-view-mode="both"')
-        self.assertContains(detail, 'data-view-mode="zh"')
-        self.assertContains(detail, 'data-view-mode="en"')
-        self.assertContains(detail, "en-only")
         self.assertContains(detail, "practice-translation")
         self.assertContains(detail, "今天我写了一篇中文日记。")
-        self.assertContains(detail, 'class="bilingual-group is-linked"')
-        self.assertContains(detail, "bilingual-group-link")
-        self.assertContains(detail, f'href="#sentence-{sentences[0].id}"')
-        self.assertContains(detail, f'data-practice-target="sentence-{sentences[0].id}"')
-        self.assertContains(detail, f'id="sentence-{sentences[0].id}"')
-        self.assertContains(detail, "data-practice-modal hidden")
-        self.assertContains(detail, 'class="card practice-section"')
+        self.assertContains(detail, "data-full-english")
+        self.assertContains(detail, "data-read-aloud")
+        self.assertContains(detail, "data-word-card-url")
+        self.assertContains(detail, "data-word-sheet")
         self.assertContains(detail, "data-diary-read-control")
+        self.assertContains(detail, "data-record-control")
+        self.assertContains(detail, f'id="sentence-{sentences[0].id}"')
         self.assertContains(detail, "正常朗读这一句")
         self.assertContains(detail, "慢速朗读这一句")
+        self.assertNotContains(detail, 'data-view-mode=')
+        self.assertNotContains(detail, "data-practice-modal")
+        self.assertNotContains(detail, "bilingual-group-link")
 
     def test_aligned_version_stores_grouped_sentences(self):
         diary = make_diary(self.owner)
@@ -1157,12 +1198,13 @@ class WordTTSFlowTests(AudioTestBase):
         self.assertFalse(response.json()["cached"])
         self.assertTrue(WordTtsRender.objects.filter(target_word="I'm").exists())
 
-    def test_word_line_shows_word_and_ipa(self):
+    def test_word_line_is_clickable_without_inline_ipa(self):
         diary, sentence = self.make_sentence()
         response = self.client.get(reverse("diary_detail", args=[diary.id]))
-        self.assertContains(response, "data-word-unit")
-        self.assertContains(response, "word-ipa")
-        self.assertContains(response, "ˈwɔtər")
+        self.assertContains(response, "data-word-card-url")
+        self.assertContains(response, "data-word-sheet")
+        self.assertNotContains(response, "word-ipa")
+        self.assertNotContains(response, "ˈwɔtər")
         self.assertNotContains(response, "wa·ter")
 
     def test_word_line_keeps_punctuation_with_words(self):
@@ -2312,7 +2354,7 @@ class AssessmentFlowTests(AudioTestBase):
         self.assertFalse(path.exists())
         self.assertFalse(PronunciationAttempt.objects.exists())
 
-    def test_latest_score_is_rendered_on_detail_page(self):
+    def test_assessment_result_is_available_in_word_card(self):
         diary, sentence = self.make_sentence()
         token = sentence.tokens.first()
         self.client.post(
@@ -2320,8 +2362,9 @@ class AssessmentFlowTests(AudioTestBase):
             {"audio": self._upload()},
         )
         response = self.client.get(reverse("diary_detail", args=[diary.id]))
-        self.assertContains(response, "准确度")
-        self.assertContains(response, "86")
+        self.assertContains(response, "data-word-sheet")
+        self.assertContains(response, "data-assess-button")
+        self.assertNotContains(response, "准确度")
 
 
 class WordLookupServiceTests(DiaryFixtureMixin, TestCase):
@@ -2332,6 +2375,7 @@ class WordLookupServiceTests(DiaryFixtureMixin, TestCase):
         self.assertEqual(lookup.ipa, "ˈwɔtər")
         self.assertIn("·", lookup.syllables)
         self.assertIn("模拟释义", lookup.translation)
+        self.assertTrue(lookup.senses)
 
         counter = UsageCounter.objects.get(user=self.owner, feature="translation")
         self.assertEqual(counter.request_count, 1)
@@ -2534,20 +2578,20 @@ class AccentIPATests(DiaryFixtureMixin, TestCase):
         token = version.sentences.get().tokens.get()
         return diary, version, token
 
-    def test_detail_page_uses_uk_ipa_for_uk_user(self):
-        diary, _version, _token = self._water_diary()
+    def test_word_card_uses_uk_ipa_for_uk_user(self):
+        _diary, _version, token = self._water_diary()
         self.owner.accent = User.Accent.UK
         self.owner.save(update_fields=["accent"])
 
-        response = self.client.get(reverse("diary_detail", args=[diary.id]))
-        self.assertContains(response, "/ˈwɔːtə/")
-        self.assertNotContains(response, "/ˈwɔtər/")
+        response = self.client.post(reverse("word_card", args=[token.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["ipa"], "ˈwɔːtə")
 
-    def test_detail_page_keeps_us_ipa_for_us_user(self):
-        diary, _version, _token = self._water_diary()
-        response = self.client.get(reverse("diary_detail", args=[diary.id]))
-        self.assertContains(response, "/ˈwɔtər/")
-        self.assertNotContains(response, "/ˈwɔːtə/")
+    def test_word_card_keeps_us_ipa_for_us_user(self):
+        _diary, _version, token = self._water_diary()
+        response = self.client.post(reverse("word_card", args=[token.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["ipa"], "ˈwɔtər")
 
     def test_lookup_page_uses_uk_ipa_for_uk_user(self):
         lookup_word(self.owner, "water")
@@ -2600,7 +2644,7 @@ class PhonicsPageTests(DiaryFixtureMixin, TestCase):
             response,
             reverse("word_phonics", args=[self.token.id]),
         )
-        self.assertNotContains(response, "拼读")
+        self.assertNotContains(response, "自然拼读")
 
     def test_word_phonics_page_renders_breakdown_and_controls(self):
         response = self.client.get(
@@ -3183,7 +3227,7 @@ class OCRFlowTests(DiaryFixtureMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "拍照识别生成的练习页")
         self.assertContains(response, "拍照识别")
-        self.assertContains(response, "data-practice-modal hidden")
+        self.assertContains(response, "data-word-sheet hidden")
         self.assertContains(response, "data-diary-read-control")
 
     def test_create_requires_english_text(self):
@@ -3206,3 +3250,139 @@ class OCRFlowTests(DiaryFixtureMixin, TestCase):
         self.assertContains(response, "今天最多翻译 0 次")
         self.assertContains(response, english_text)
         self.assertFalse(DiaryEntry.objects.exists())
+
+
+class WordCardTests(AudioTestBase):
+    def _water_token(self):
+        _diary, sentence = self.make_sentence(text="I read water slowly.")
+        return sentence.tokens.get(surface="water")
+
+    def test_word_card_returns_senses_ipa_syllables_and_audio_urls(self):
+        token = self._water_token()
+        response = self.client.post(reverse("word_card", args=[token.id]))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["word"], "water")
+        self.assertEqual(payload["ipa"], "ˈwɔtər")
+        self.assertEqual(payload["syllables"], ["wa", "ter"])
+        self.assertTrue(payload["senses"])
+        self.assertIn("模拟释义", payload["senses"][0]["meaning"])
+        self.assertEqual(
+            payload["word_tts_url"],
+            reverse("word_tts", args=[token.id]),
+        )
+        self.assertEqual(
+            payload["assess_url"],
+            reverse("assess_word", args=[token.id]),
+        )
+        self.assertEqual(
+            payload["syllable_audio_urls"],
+            [
+                reverse("word_syllable_audio", args=[token.id, 0]),
+                reverse("word_syllable_audio", args=[token.id, 1]),
+            ],
+        )
+        self.assertTrue(payload["syllable_sequence_url"])
+        self.assertEqual(WordLookup.objects.count(), 1)
+
+    def test_word_card_reuses_cached_dictionary_entry(self):
+        token = self._water_token()
+        first = self.client.post(reverse("word_card", args=[token.id]))
+        second = self.client.post(reverse("word_card", args=[token.id]))
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(WordLookup.objects.count(), 1)
+        counter = UsageCounter.objects.get(
+            user=self.owner, feature="translation"
+        )
+        self.assertEqual(counter.request_count, 1)
+
+    def test_word_card_enriches_legacy_dictionary_entry(self):
+        token = self._water_token()
+        old = WordLookup.objects.create(
+            word="water",
+            display_word="water",
+            ipa="ˈwɔtər",
+            ipa_uk="ˈwɔːtə",
+            syllables="wa·ter",
+            translation="水",
+            part_of_speech="n.",
+            provider="old",
+            model="old",
+        )
+        response = self.client.post(reverse("word_card", args=[token.id]))
+        self.assertEqual(response.status_code, 200)
+        old.refresh_from_db()
+        self.assertTrue(old.senses)
+        self.assertIn("模拟释义", response.json()["senses"][0]["meaning"])
+
+    @override_settings(TRANSLATION_DAILY_REQUEST_LIMIT=0)
+    def test_word_card_keeps_audio_available_when_lookup_quota_is_exhausted(self):
+        token = self._water_token()
+        response = self.client.post(reverse("word_card", args=[token.id]))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["senses"], [])
+        self.assertTrue(payload["warning"])
+        self.assertTrue(payload["tts_ready"])
+        self.assertTrue(payload["word_tts_url"])
+
+    def test_word_card_is_owner_scoped_and_post_only(self):
+        _diary, member_sentence = self.make_sentence(self.member)
+        member_token = member_sentence.tokens.get(surface="water")
+        url = reverse("word_card", args=[member_token.id])
+
+        self.assertEqual(self.client.post(url).status_code, 404)
+        own_token = self._water_token()
+        self.assertEqual(
+            self.client.get(reverse("word_card", args=[own_token.id])).status_code,
+            405,
+        )
+        self.client.logout()
+        self.assertEqual(
+            self.client.post(reverse("word_card", args=[own_token.id])).status_code,
+            302,
+        )
+
+
+class SyllableAudioTests(AudioTestBase):
+    def _water_token(self):
+        _diary, sentence = self.make_sentence(text="I read water slowly.")
+        return sentence.tokens.get(surface="water")
+
+    def test_single_syllable_audio_is_private_cached_and_quota_counted(self):
+        token = self._water_token()
+        url = reverse("word_syllable_audio", args=[token.id, 0])
+        first = self.client.post(url)
+        self.assertEqual(first.status_code, 200)
+        payload = first.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["cached"])
+
+        render = WordTtsRender.objects.get(owner=self.owner)
+        self.assertEqual(render.target_word, "water")
+        self.assertEqual(render.audio.purpose, AudioAsset.Purpose.WORD_TTS)
+        self.assertTrue((Path(self.media_dir.name) / render.audio.relative_path).exists())
+
+        second = self.client.post(url)
+        self.assertTrue(second.json()["cached"])
+        self.assertEqual(WordTtsRender.objects.count(), 1)
+        counter = UsageCounter.objects.get(user=self.owner, feature="tts")
+        self.assertEqual(counter.char_count, len("wa"))
+
+    def test_invalid_syllable_index_is_rejected(self):
+        token = self._water_token()
+        response = self.client.post(
+            reverse("word_syllable_audio", args=[token.id, 99])
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_syllable_audio_is_owner_scoped_and_post_only(self):
+        _diary, member_sentence = self.make_sentence(self.member)
+        member_token = member_sentence.tokens.get(surface="water")
+        url = reverse("word_syllable_audio", args=[member_token.id, 0])
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.assertEqual(self.client.post(url).status_code, 404)

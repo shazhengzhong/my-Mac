@@ -65,11 +65,52 @@ def lookup_word(user, query: str) -> WordLookup:
             syllables=syllables,
             translation=translation.translation,
             part_of_speech=translation.part_of_speech[:40],
+            senses=[
+                {"pos": sense.pos, "meaning": sense.meaning}
+                for sense in translation.senses
+            ],
             provider=translator.source,
             model=translator.model,
         )
     except IntegrityError:
         return WordLookup.objects.get(word=normalized)
+
+
+def ensure_word_senses(user, lookup: WordLookup) -> str:
+    """Fill structured senses for an older cached entry when first needed."""
+    if lookup.senses:
+        return ""
+    translator = get_translator()
+    consume_translation_quota(user, len(lookup.display_word))
+    translation = translator.translate_word(lookup.display_word)
+    senses = [
+        {"pos": sense.pos, "meaning": sense.meaning}
+        for sense in translation.senses
+    ]
+    if not senses and translation.translation.strip():
+        senses = [
+            {
+                "pos": translation.part_of_speech[:24],
+                "meaning": translation.translation.strip()[:300],
+            }
+        ]
+    if not senses:
+        return "这个单词暂时没有可用的中文释义。"
+    lookup.translation = translation.translation
+    lookup.part_of_speech = translation.part_of_speech[:40]
+    lookup.senses = senses
+    lookup.provider = translator.source
+    lookup.model = translator.model
+    lookup.save(
+        update_fields=[
+            "translation",
+            "part_of_speech",
+            "senses",
+            "provider",
+            "model",
+        ]
+    )
+    return ""
 
 
 class TranslationQuotaExceeded(Exception):

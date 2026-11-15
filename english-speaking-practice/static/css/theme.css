@@ -1319,3 +1319,554 @@ textarea::placeholder {
     gap: 0.4rem;
   }
 }
+
+/* Full English reading and inline word practice */
+
+.full-english-card {
+  padding-bottom: 0.85rem;
+}
+
+.full-english-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.full-english-heading h2 {
+  margin-bottom: 0.1rem;
+}
+
+.full-english-toggle {
+  flex: 0 0 auto;
+  padding: 0.24rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.full-english-toggle:hover,
+.full-english-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+  outline: none;
+}
+
+.full-english-body[hidden] {
+  display: none;
+}
+
+.full-english-text {
+  color: #1f2937;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.07rem;
+  line-height: 1.75;
+}
+
+.full-english-line {
+  margin: 0 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.full-english-line:last-child {
+  margin-bottom: 0;
+}
+
+.karaoke-word.word-card-trigger,
+.karaoke-word.word-card-trigger:focus-visible {
+  display: inline;
+  padding: 0 0.02em;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.karaoke-word.word-card-trigger:hover,
+.karaoke-word.word-card-trigger:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  outline: none;
+}
+
+.karaoke-word.word-card-trigger.is-active-word {
+  background: #dbeafe;
+  color: var(--accent-dark);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.practice-sentence {
+  padding: 0.1rem 0 0.45rem;
+  border-bottom: 1px dashed #eef2f7;
+}
+
+.practice-sentence:last-child {
+  border-bottom: 0;
+  padding-bottom: 0.1rem;
+}
+
+.practice-en {
+  margin-bottom: 0.28rem;
+}
+
+.practice-controls {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.05rem;
+  flex-wrap: wrap;
+}
+
+.practice-controls .diary-read-controls {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.record-control {
+  gap: 0.25rem;
+}
+
+.practice-controls .icon-button {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+.practice-controls .record-status {
+  font-size: 0.68rem;
+}
+
+.practice-controls .recording-history {
+  flex-basis: 100%;
+  margin-top: 0.1rem;
+}
+
+.bilingual-group {
+  padding-bottom: 0.55rem;
+}
+
+.bilingual-group .practice-translation {
+  margin-top: 0.35rem;
+}
+
+.bilingual-list {
+  gap: 0.55rem;
+}
+
+/* Bottom sheet for a clicked word */
+
+.word-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.word-sheet[hidden] {
+  display: none;
+}
+
+.word-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.word-sheet.is-open .word-sheet-backdrop {
+  opacity: 1;
+}
+
+.word-sheet-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 560px);
+  max-height: min(68vh, 640px);
+  overflow: hidden;
+  border-radius: 22px 22px 0 0;
+  background: #fff;
+  box-shadow: 0 -12px 50px rgba(15, 23, 42, 0.2);
+  transform: translateY(100%);
+  transition: transform 0.22s ease;
+}
+
+.word-sheet.is-open .word-sheet-panel {
+  transform: translateY(0);
+}
+
+.word-sheet-drag {
+  flex: 0 0 auto;
+  width: 2.6rem;
+  height: 0.28rem;
+  margin: 0.55rem auto 0.15rem;
+  border-radius: 999px;
+  background: #d6deea;
+  cursor: grab;
+  touch-action: none;
+}
+
+.word-sheet-drag:active {
+  cursor: grabbing;
+}
+
+.word-sheet-close {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.55rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #f4f7fb;
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.word-sheet-close:hover,
+.word-sheet-close:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  outline: none;
+}
+
+.word-sheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.15rem 1.1rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.word-sheet-header {
+  padding: 0.1rem 1.8rem 0;
+  text-align: center;
+  touch-action: none;
+}
+
+.word-sheet-word {
+  margin: 0 0 0.2rem;
+  color: var(--accent);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: clamp(1.9rem, 8vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.word-sheet-ipa {
+  display: inline-block;
+  margin: 0;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  background: #f4f7fb;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.word-sheet-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0.55rem;
+}
+
+.word-sheet-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.15rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.word-sheet-action:hover,
+.word-sheet-action:focus-visible {
+  background: #dbeafe;
+  outline: none;
+}
+
+.word-sheet-action:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.word-sheet-action-icon {
+  width: 0.98rem;
+  height: 0.98rem;
+  flex: 0 0 auto;
+}
+
+.word-sheet-loop[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.word-sheet-senses {
+  margin-top: 0.15rem;
+}
+
+.word-sense {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.45rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f0f3f8;
+}
+
+.word-sense:last-child {
+  border-bottom: 0;
+}
+
+.word-sense-pos {
+  min-width: 2.6rem;
+  color: var(--accent-2-ink);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.word-sense-meaning {
+  color: #344054;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.word-sense-speak {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: #f4f7fb;
+  color: #667085;
+  cursor: pointer;
+}
+
+.word-sense-speak .icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.word-sense-speak:hover,
+.word-sense-speak:focus-visible {
+  background: var(--accent-4-soft);
+  color: var(--accent-4-ink);
+  outline: none;
+}
+
+.word-sheet-empty {
+  margin: 0.4rem 0 0.7rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.word-sheet-syllables {
+  margin-top: 0.7rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed #e5eaf2;
+}
+
+.word-sheet-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.word-sheet-syllable-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.word-syllable {
+  min-width: 2.6rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid #e5eaf2;
+  border-radius: 8px;
+  background: #f8fafc;
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.word-syllable:nth-child(3n + 1) {
+  color: var(--accent);
+}
+
+.word-syllable:nth-child(3n + 2) {
+  color: var(--accent-2-ink);
+}
+
+.word-syllable:nth-child(3n + 3) {
+  color: var(--accent-3-ink);
+}
+
+.word-syllable:hover,
+.word-syllable:focus-visible {
+  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.word-sheet-syllable-all {
+  padding: 0.1rem 0.2rem;
+  border: 0;
+  background: transparent;
+  color: var(--accent-dark);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.word-sheet-syllable-all:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.word-sheet-assess {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+  padding-top: 0.7rem;
+  border: 0;
+  border-top: 1px dashed #e5eaf2;
+  background: transparent;
+}
+
+.word-sheet-assess[hidden] {
+  display: none;
+}
+
+.word-sheet-assess-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--accent-2-soft);
+  color: var(--accent-2-ink);
+}
+
+.word-sheet-assess-button .icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.word-sheet-assess .assess-result {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.word-sheet-assess .assess-result[data-kind="success"] {
+  color: var(--accent-4-ink);
+}
+
+.word-sheet-assess .assess-result[data-kind="error"] {
+  color: var(--danger);
+}
+
+.word-sheet-status {
+  min-height: 1.2rem;
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.word-sheet-status:empty {
+  display: none;
+}
+
+.word-sheet-status[data-kind="loading"] {
+  color: var(--accent-dark);
+}
+
+.word-sheet-status[data-kind="warning"] {
+  color: var(--accent-3-ink);
+}
+
+.word-sheet-status[data-kind="error"] {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+body.word-sheet-open {
+  overflow: hidden;
+}
+
+@media (min-width: 760px) {
+  .word-sheet {
+    padding: 1.2rem;
+  }
+
+  .word-sheet-panel {
+    max-height: min(70vh, 620px);
+    border-radius: 20px;
+  }
+}
+
+@media (max-width: 700px) {
+  .full-english-text {
+    font-size: 1.03rem;
+  }
+
+  .full-english-heading {
+    gap: 0.5rem;
+  }
+
+  .word-sheet-scroll {
+    padding-inline: 0.9rem;
+  }
+
+  .word-sheet-word {
+    font-size: 2rem;
+  }
+}

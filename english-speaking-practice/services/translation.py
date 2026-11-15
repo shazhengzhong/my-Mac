@@ -41,10 +41,12 @@ PAIR_SYSTEM_PROMPT = (
 )
 
 WORD_SYSTEM_PROMPT = (
-    "You are a concise English-Chinese dictionary. For the English word the user sends, "
-    'return only a JSON object of the form {"translation": "中文释义", '
-    '"part_of_speech": "词性，如 n./v./adj."}. Do not add examples, pronunciation, '
-    "or commentary. Do not use markdown or code fences."
+    "You are a concise English-Chinese dictionary for learners. For the English word the user sends, "
+    "return only a JSON object with a senses array. Each sense must have a short part-of-speech "
+    "label and a concise Simplified Chinese meaning. Include the common parts of speech, in this "
+    'shape: {"senses": [{"pos": "adj.", "meaning": "右边的；正确的"}, '
+    '{"pos": "adv.", "meaning": "正确地；向右"}, {"pos": "n.", "meaning": "权利；右边"}]}. '
+    "Do not add examples, pronunciation, or commentary. Do not use markdown or code fences."
 )
 
 ENGLISH_PAIR_SYSTEM_PROMPT = (
@@ -68,9 +70,16 @@ class TranslationPair:
 
 
 @dataclass(frozen=True)
+class WordSense:
+    pos: str
+    meaning: str
+
+
+@dataclass(frozen=True)
 class WordTranslation:
     translation: str
     part_of_speech: str = ""
+    senses: tuple[WordSense, ...] = ()
 
 
 class Translator(Protocol):
@@ -117,9 +126,11 @@ class MockTranslator:
         cleaned = (word or "").strip()
         if not cleaned:
             raise TranslationError("请输入英文单词。")
+        meaning = f"（模拟释义）{cleaned} 的中文意思。"
         return WordTranslation(
-            translation=f"（模拟释义）{cleaned} 的中文意思。",
+            translation=meaning,
             part_of_speech="",
+            senses=(WordSense(pos="", meaning=meaning),),
         )
 
 
@@ -334,12 +345,42 @@ class DeepSeekTranslator:
         except TranslationError:
             parsed = None
         if isinstance(parsed, dict):
+            senses: list[WordSense] = []
+            raw_senses = parsed.get("senses")
+            if isinstance(raw_senses, list):
+                for item in raw_senses[:12]:
+                    if not isinstance(item, dict):
+                        continue
+                    pos = str(item.get("pos") or item.get("part_of_speech") or "").strip()
+                    meaning = str(item.get("meaning") or "").strip()
+                    if meaning:
+                        senses.append(WordSense(pos=pos[:24], meaning=meaning[:300]))
+            if senses:
+                part_of_speech = senses[0].pos
+                translation = "；".join(
+                    f"{sense.pos} {sense.meaning}".strip()
+                    for sense in senses
+                )
+                return WordTranslation(
+                    translation=translation,
+                    part_of_speech=part_of_speech,
+                    senses=tuple(senses),
+                )
+
+            # Backward-compatible shape from older cached model responses.
             translation = parsed.get("translation")
             part_of_speech = parsed.get("part_of_speech") or ""
             if isinstance(translation, str) and translation.strip():
+                meaning = translation.strip()
                 return WordTranslation(
-                    translation=translation.strip(),
-                    part_of_speech=str(part_of_speech).strip(),
+                    translation=meaning,
+                    part_of_speech=str(part_of_speech).strip()[:24],
+                    senses=(
+                        WordSense(
+                            pos=str(part_of_speech).strip()[:24],
+                            meaning=meaning[:300],
+                        ),
+                    ),
                 )
 
         cleaned = content.strip()

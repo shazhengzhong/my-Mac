@@ -40,8 +40,12 @@
   }
 
   function wordsFor(control) {
+    const sentenceRow = control.closest("[data-sentence-row]");
     const group = control.closest(".bilingual-group");
-    const sentence = group ? group.querySelector(".bilingual-en") : null;
+    const container = sentenceRow || group;
+    const sentence = container
+      ? container.querySelector(".bilingual-en")
+      : null;
     return sentence
       ? Array.from(sentence.querySelectorAll(".karaoke-word"))
       : [];
