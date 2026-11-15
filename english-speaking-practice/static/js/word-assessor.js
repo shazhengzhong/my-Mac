@@ -17,7 +17,11 @@
       return null;
     }
     if (!feedbackContext) {
-      feedbackContext = new AudioContextClass();
+      try {
+        feedbackContext = new AudioContextClass();
+      } catch (_error) {
+        return null;
+      }
     }
     if (feedbackContext.state === "suspended") {
       feedbackContext.resume().catch(() => {
