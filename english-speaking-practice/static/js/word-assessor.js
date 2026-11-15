@@ -46,7 +46,7 @@
     oscillator.stop(startAt + duration + 0.03);
   }
 
-  function playScoreTone(score) {
+  function playWebAudioTone(score) {
     const context = ensureFeedbackContext();
     if (!context) {
       return;
@@ -68,6 +68,26 @@
     } else {
       run();
     }
+  }
+
+  function playScoreTone(score) {
+    const toneName = score < 70 ? "low" : "high";
+    const player = document.querySelector(`[data-assess-tone="${toneName}"]`);
+    if (player) {
+      try {
+        player.pause();
+        player.currentTime = 0;
+        player.volume = 0.9;
+        const attempt = player.play();
+        if (attempt && typeof attempt.catch === "function") {
+          attempt.catch(() => playWebAudioTone(score));
+        }
+        return;
+      } catch (_error) {
+        // Fall back to Web Audio.
+      }
+    }
+    playWebAudioTone(score);
   }
 
   function unitFor(button) {
