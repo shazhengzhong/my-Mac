@@ -54,11 +54,11 @@
     const run = () => {
       const now = context.currentTime + 0.02;
       if (score < 70) {
-        tone(context, 220, now, 0.2, 0.08);
-        tone(context, 174, now + 0.24, 0.28, 0.08);
+        tone(context, 220, now, 0.24, 0.16);
+        tone(context, 174, now + 0.28, 0.32, 0.16);
       } else {
-        tone(context, 660, now, 0.12, 0.07);
-        tone(context, 880, now + 0.15, 0.18, 0.07);
+        tone(context, 660, now, 0.14, 0.14);
+        tone(context, 880, now + 0.18, 0.22, 0.14);
       }
     };
     if (context.state === "suspended") {
@@ -267,12 +267,13 @@
       );
       const payload = await upload(button, wavBlob);
 
+      const rawScore =
+        payload.overall_score !== null && payload.overall_score !== undefined
+          ? payload.overall_score
+          : payload.accuracy;
+      const score = Number(rawScore);
+
       if (button.dataset.scoreOnly === "true") {
-        const rawScore =
-          payload.overall_score !== null && payload.overall_score !== undefined
-            ? payload.overall_score
-            : payload.accuracy;
-        const score = Number(rawScore);
         if (Number.isFinite(score)) {
           setResult(
             button,
@@ -280,7 +281,6 @@
             score < 70 ? "warning" : "success",
             payload.audio_url || "",
           );
-          playScoreTone(score);
         } else {
           setResult(button, "— 分", "error");
         }
@@ -297,6 +297,10 @@
           message += ` · ${hint}`;
         }
         setResult(button, message, "success", payload.audio_url || "");
+      }
+
+      if (Number.isFinite(score)) {
+        playScoreTone(score);
       }
     } catch (error) {
       setResult(button, error.message || "测评失败，请重试。", "error");
