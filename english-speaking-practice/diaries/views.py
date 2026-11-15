@@ -51,6 +51,7 @@ from services.tts import (
     get_tts_provider,
     tts_cache_key,
     word_tts_context,
+    word_tts_ssml,
 )
 
 from .forms import DiaryForm, EnglishVersionForm, IpaCorrectionForm
@@ -996,9 +997,13 @@ def word_tts(request, token_id):
     except TTSError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=503)
 
-    style = "natural"
+    ssml_text = word_tts_ssml(token.surface)
+    use_ssml = bool(ssml_text) and hasattr(provider, "synthesize_ssml")
+    style = "word_ssml" if use_ssml else "natural"
     speed = "word"
     context = word_tts_context(token.surface)
+    if use_ssml:
+        context = f"{context}|ssml:v1"
     cache_key = tts_cache_key(
         provider=provider.provider,
         model=provider.model,
@@ -1028,9 +1033,16 @@ def word_tts(request, token_id):
 
     try:
         consume_tts_quota(request.user, len(token.surface))
-        result = provider.synthesize(
-            token.surface, speed=speed, style=style, context_text=context
-        )
+        if use_ssml:
+            result = provider.synthesize_ssml(
+                ssml_text,
+                speed=speed,
+                style=style,
+            )
+        else:
+            result = provider.synthesize(
+                token.surface, speed=speed, style=style, context_text=context
+            )
         render = create_word_tts_render(
             owner=request.user,
             sentence=token.sentence,

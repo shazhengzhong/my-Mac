@@ -9,6 +9,61 @@
   const MAX_SECONDS = 3;
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   let activeSession = null;
+  let feedbackContext = null;
+
+  function ensureFeedbackContext() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return null;
+    }
+    if (!feedbackContext) {
+      feedbackContext = new AudioContextClass();
+    }
+    if (feedbackContext.state === "suspended") {
+      feedbackContext.resume().catch(() => {
+        // The score is still shown when audio feedback is unavailable.
+      });
+    }
+    return feedbackContext;
+  }
+
+  function tone(context, frequency, startAt, duration, volume = 0.045) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, startAt);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + duration + 0.03);
+  }
+
+  function playScoreTone(score) {
+    const context = ensureFeedbackContext();
+    if (!context) {
+      return;
+    }
+    const run = () => {
+      const now = context.currentTime + 0.02;
+      if (score < 70) {
+        tone(context, 220, now, 0.2, 0.05);
+        tone(context, 174, now + 0.24, 0.28, 0.05);
+      } else {
+        tone(context, 660, now, 0.12, 0.04);
+        tone(context, 880, now + 0.15, 0.18, 0.04);
+      }
+    };
+    if (context.state === "suspended") {
+      context.resume().then(run).catch(() => {
+        // Ignore audio feedback failures.
+      });
+    } else {
+      run();
+    }
+  }
 
   function unitFor(button) {
     return button.closest("[data-word-unit], .word-chip");
@@ -185,18 +240,36 @@
       );
       const payload = await upload(button, wavBlob);
 
-      let message = `准确度 ${formatScore(payload.accuracy)}`;
-      if (payload.overall_score !== null && payload.overall_score !== undefined) {
-        message += ` · 综合 ${formatScore(payload.overall_score)}`;
+      if (button.dataset.scoreOnly === "true") {
+        const rawScore =
+          payload.overall_score !== null && payload.overall_score !== undefined
+            ? payload.overall_score
+            : payload.accuracy;
+        const score = Number(rawScore);
+        if (Number.isFinite(score)) {
+          setResult(
+            button,
+            `${Math.round(score)} 分`,
+            score < 70 ? "warning" : "success",
+          );
+          playScoreTone(score);
+        } else {
+          setResult(button, "— 分", "error");
+        }
+      } else {
+        let message = `准确度 ${formatScore(payload.accuracy)}`;
+        if (payload.overall_score !== null && payload.overall_score !== undefined) {
+          message += ` · 综合 ${formatScore(payload.overall_score)}`;
+        }
+        if (payload.match_tag === 4) {
+          message += " · 不在词典";
+        }
+        const hint = phoneHint(payload.detail);
+        if (hint) {
+          message += ` · ${hint}`;
+        }
+        setResult(button, message, "success", payload.audio_url || "");
       }
-      if (payload.match_tag === 4) {
-        message += " · 不在词典";
-      }
-      const hint = phoneHint(payload.detail);
-      if (hint) {
-        message += ` · ${hint}`;
-      }
-      setResult(button, message, "success", payload.audio_url || "");
     } catch (error) {
       setResult(button, error.message || "测评失败，请重试。", "error");
     } finally {
@@ -211,6 +284,7 @@
   }
 
   async function start(button) {
+    ensureFeedbackContext();
     if (!window.isSecureContext) {
       setResult(button, "需要通过 HTTPS 打开页面才能录音。", "error");
       return;

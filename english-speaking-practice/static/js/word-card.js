@@ -79,19 +79,6 @@
     button.setAttribute("aria-expanded", active ? "true" : "false");
   }
 
-  function stopChineseSpeech() {
-    try {
-      if (window.AndroidTts && typeof window.AndroidTts.stop === "function") {
-        window.AndroidTts.stop();
-      }
-    } catch (_error) {
-      // Ignore native bridge failures.
-    }
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-  }
-
   function stopAudio() {
     audioRequestId += 1;
     try {
@@ -178,18 +165,18 @@
     }
     try {
       await audio.play();
-      if (request === audioRequestId && !message) {
-        setStatus(autoplay ? "" : "");
+      if (request === audioRequestId) {
+        setStatus("");
       }
     } catch (_error) {
+      // Autoplay may be blocked; the visible play button is the fallback.
       if (request === audioRequestId) {
-        setStatus("已生成，请点“发音”按钮播放。", "warning");
+        setStatus("");
       }
     }
   }
 
   async function playWord({ autoplay = true } = {}) {
-    stopChineseSpeech();
     if (!activeCard || !activeCard.tts_ready || !activeCard.word_tts_url) {
       setStatus("当前没有可用的单词发音。", "warning");
       return;
@@ -219,65 +206,57 @@
     }
   }
 
-  function speakChinese(text) {
-    if (
-      window.AndroidTts &&
-      typeof window.AndroidTts.isAvailable === "function" &&
-      window.AndroidTts.isAvailable()
-    ) {
-      if (loop) {
-        setLoop(false);
-      }
-      stopAudio();
-      try {
-        window.AndroidTts.stop();
-        if (window.AndroidTts.speak(text)) {
-          setStatus("正在朗读中文释义…");
-          return;
-        }
-      } catch (_error) {
-        // Fall through to the browser speech engine.
-      }
-    }
+  const POS_LABELS = {
+    n: "名词",
+    noun: "名词",
+    v: "动词",
+    verb: "动词",
+    adj: "形容词",
+    adjective: "形容词",
+    adv: "副词",
+    adverb: "副词",
+    prep: "介词",
+    preposition: "介词",
+    conj: "连词",
+    conjunction: "连词",
+    pron: "代词",
+    pronoun: "代词",
+    det: "限定词",
+    determiner: "限定词",
+    num: "数词",
+    numeral: "数词",
+    interj: "感叹词",
+    interjection: "感叹词",
+    int: "感叹词",
+    aux: "助动词",
+    auxiliary: "助动词",
+    modal: "情态动词",
+    art: "冠词",
+    article: "冠词",
+    phr: "短语",
+    phrase: "短语",
+    abbr: "缩写",
+    abbreviation: "缩写",
+  };
 
-    if (!("speechSynthesis" in window)) {
-      setStatus("当前设备不支持中文朗读。", "warning");
-      return;
+  function posLabel(value) {
+    const raw = (value || "").trim();
+    if (!raw) {
+      return "";
     }
-    window.speechSynthesis.cancel();
-    if (loop) {
-      setLoop(false);
+    const key = raw.toLowerCase().replace(/\./g, "").trim();
+    if (POS_LABELS[key]) {
+      return POS_LABELS[key];
     }
-    stopAudio();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "zh-CN";
-    utterance.rate = 0.95;
-    const voices = window.speechSynthesis.getVoices();
-    const chineseVoice = voices.find((voice) => /^zh/i.test(voice.lang));
-    if (voices.length && !chineseVoice) {
-      setStatus("当前设备没有中文语音，无法朗读中文释义。", "warning");
-      return;
-    }
-    if (chineseVoice) {
-      utterance.voice = chineseVoice;
-    }
-    window.speechSynthesis.speak(utterance);
-    setStatus("正在朗读中文释义…");
-  }
-
-  function makeSpeakerButton(text) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "word-sense-speak";
-    button.setAttribute("aria-label", "朗读这条中文释义");
-    button.title = "朗读中文释义";
-    button.innerHTML =
-      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
-      '<path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"></path>' +
-      '<path d="M15.5 8.7a4.8 4.8 0 0 1 0 6.6M18.2 6a8.3 8.3 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>' +
-      "</svg>";
-    button.addEventListener("click", () => speakChinese(text));
-    return button;
+    const parts = raw
+      .split(/[\/,]/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const translated = parts.map((part) => {
+      const normalized = part.toLowerCase().replace(/\./g, "").trim();
+      return POS_LABELS[normalized] || part;
+    });
+    return translated.join(" / ");
   }
 
   function renderSenses(data) {
@@ -296,13 +275,13 @@
 
       const pos = document.createElement("span");
       pos.className = "word-sense-pos";
-      pos.textContent = sense.pos || "";
+      pos.textContent = posLabel(sense.pos);
 
       const meaning = document.createElement("span");
       meaning.className = "word-sense-meaning";
       meaning.textContent = sense.meaning || "";
 
-      row.append(pos, meaning, makeSpeakerButton(sense.meaning || ""));
+      row.append(pos, meaning);
       sensesElement.appendChild(row);
     });
   }
@@ -370,7 +349,6 @@
   }
 
   async function playSyllable(index) {
-    stopChineseSpeech();
     if (!activeCard || !activeCard.syllable_audio_urls[index]) {
       setStatus("这个音节暂时没有可用发音。", "warning");
       return;
@@ -384,10 +362,7 @@
       if (request !== audioRequestId || activeCard !== card) {
         return;
       }
-      await playUrl(payload.audio_url, {
-        autoplay: true,
-        message: `正在播放音节 ${card.syllables[index] || ""}`,
-      });
+      await playUrl(payload.audio_url, { autoplay: true });
     } catch (error) {
       if (request === audioRequestId) {
         setStatus(error.message || "音节发音生成失败，请重试。", "error");
@@ -396,7 +371,6 @@
   }
 
   async function playSyllableSequence() {
-    stopChineseSpeech();
     if (!activeCard || !activeCard.syllable_sequence_url) {
       setStatus("这个单词暂时没有可用的拼读音频。", "warning");
       return;
@@ -410,10 +384,7 @@
       if (request !== audioRequestId || activeCard !== card) {
         return;
       }
-      await playUrl(payload.audio_url, {
-        autoplay: true,
-        message: "正在播放整词拼读",
-      });
+      await playUrl(payload.audio_url, { autoplay: true });
     } catch (error) {
       if (request === audioRequestId) {
         setStatus(error.message || "整词拼读生成失败，请重试。", "error");
@@ -519,7 +490,6 @@
     }
     requestId += 1;
     stopAudio();
-    stopChineseSpeech();
     setLoop(false);
     setWordHighlight(activeButton, false);
     activeButton = null;
@@ -571,9 +541,7 @@
   });
 
   audio.addEventListener("ended", () => {
-    if (!loop) {
-      setStatus("播放完毕");
-    }
+    // Keep the sheet height stable; playback status is intentionally hidden.
   });
 
   document.addEventListener("keydown", (event) => {

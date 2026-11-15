@@ -9,10 +9,8 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.speech.tts.TextToSpeech;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
-import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
@@ -26,7 +24,6 @@ import android.widget.Toast;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final String START_URL = "https://192.168.5.4:8443/";
@@ -36,8 +33,6 @@ public class MainActivity extends Activity {
     private static final int REQUEST_CROP = 1005;
 
     private WebView webView;
-    private TextToSpeech textToSpeech;
-    private volatile boolean ttsReady;
     private ValueCallback<Uri[]> pendingFileCallback;
     private PermissionRequest pendingPermissionRequest;
     private Uri pendingCameraUri;
@@ -46,24 +41,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        textToSpeech =
-                new TextToSpeech(
-                        this,
-                        status -> {
-                            if (status != TextToSpeech.SUCCESS || textToSpeech == null) {
-                                ttsReady = false;
-                                return;
-                            }
-                            int result = textToSpeech.setLanguage(Locale.CHINA);
-                            ttsReady =
-                                    result != TextToSpeech.LANG_MISSING_DATA
-                                            && result != TextToSpeech.LANG_NOT_SUPPORTED;
-                            if (ttsReady) {
-                                textToSpeech.setSpeechRate(0.95f);
-                                textToSpeech.setPitch(1.0f);
-                            }
-                        });
 
         webView = new WebView(this);
         setContentView(
@@ -89,7 +66,6 @@ public class MainActivity extends Activity {
         settings.setUserAgentString(
                 settings.getUserAgentString() + " FamilyDiaryShell/1.0");
 
-        webView.addJavascriptInterface(new TtsBridge(), "AndroidTts");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
@@ -357,49 +333,8 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
-    private final class TtsBridge {
-        @JavascriptInterface
-        public boolean isAvailable() {
-            return ttsReady;
-        }
-
-        @JavascriptInterface
-        public boolean speak(String text) {
-            if (!ttsReady || textToSpeech == null || text == null || text.trim().isEmpty()) {
-                return false;
-            }
-            final String content = text.trim();
-            runOnUiThread(
-                    () -> {
-                        if (textToSpeech == null) {
-                            return;
-                        }
-                        textToSpeech.setLanguage(Locale.CHINA);
-                        textToSpeech.speak(
-                                content,
-                                TextToSpeech.QUEUE_FLUSH,
-                                null,
-                                "word-meaning");
-                    });
-            return true;
-        }
-
-        @JavascriptInterface
-        public void stop() {
-            if (textToSpeech != null) {
-                textToSpeech.stop();
-            }
-        }
-    }
-
     @Override
     protected void onDestroy() {
-        if (textToSpeech != null) {
-            textToSpeech.stop();
-            textToSpeech.shutdown();
-            textToSpeech = null;
-            ttsReady = false;
-        }
         if (webView != null) {
             webView.loadUrl("about:blank");
             webView.destroy();

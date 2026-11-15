@@ -70,6 +70,7 @@ from services.tts import (
     get_tts_provider,
     tts_cache_key,
     word_tts_context,
+    word_tts_ssml,
 )
 
 from .models import (
@@ -1915,6 +1916,38 @@ class CosyVoiceTTSServiceTests(TestCase):
             captured["headers"].get("x-dashscope-workspace"),
             "ws-test",
         )
+
+    def test_ssml_word_synthesis_sends_enable_ssml(self):
+        captured = {}
+        wav_data = self._wav()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST":
+                captured["payload"] = json.loads(request.content.decode("utf-8"))
+                return httpx.Response(
+                    200,
+                    json={"output": {"audio": {"url": "https://audio.test/ssml.wav"}}},
+                )
+            if request.url.host == "audio.test":
+                return httpx.Response(
+                    200,
+                    headers={"content-type": "audio/wav"},
+                    content=wav_data,
+                )
+            return httpx.Response(404)
+
+        result = self._provider(handler).synthesize_ssml(
+            '<speak><phoneme alphabet="cmu" ph="R IH1 V ER0 S AY2 D">riverside</phoneme></speak>',
+            speed="word",
+            style="word_ssml",
+        )
+        self.assertEqual(result.data, wav_data)
+        self.assertTrue(captured["payload"]["input"]["enable_ssml"])
+        self.assertIn("R IH1", captured["payload"]["input"]["text"])
+
+    def test_riverside_has_a_word_ssml_override(self):
+        self.assertIn("R IH1 V ER0 S AY2 D", word_tts_ssml("riverside"))
+        self.assertEqual(word_tts_ssml("water"), "")
 
     def test_websocket_sentence_synthesis_collects_timings(self):
         wav_data = self._wav()

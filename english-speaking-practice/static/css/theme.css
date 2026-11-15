@@ -1664,32 +1664,6 @@ textarea::placeholder {
   overflow-wrap: anywhere;
 }
 
-.word-sense-speak {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: #f4f7fb;
-  color: #667085;
-  cursor: pointer;
-}
-
-.word-sense-speak .icon {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-.word-sense-speak:hover,
-.word-sense-speak:focus-visible {
-  background: var(--accent-4-soft);
-  color: var(--accent-4-ink);
-  outline: none;
-}
-
 .word-sheet-empty {
   margin: 0.4rem 0 0.7rem;
   color: var(--muted);
@@ -1868,5 +1842,195 @@ body.word-sheet-open {
 
   .word-sheet-word {
     font-size: 2rem;
+  }
+}
+
+/* Refinements: paragraph flow, karaoke, and larger word sheet */
+
+.full-english-line + .full-english-line {
+  margin-top: 0.7rem;
+}
+
+.full-english-text .karaoke-word.karaoke-active,
+.practice-en .karaoke-word.karaoke-active {
+  background: #fff4d6;
+  color: #22332e;
+  box-shadow: 0 0 0 1px rgba(228, 193, 90, 0.25);
+}
+
+.full-english-text .karaoke-word.karaoke-done,
+.practice-en .karaoke-word.karaoke-done {
+  color: #63877a;
+}
+
+.word-sheet-panel {
+  width: min(100%, 600px);
+  max-height: min(72vh, 700px);
+}
+
+.word-sheet-scroll {
+  padding: 0.15rem 1.25rem calc(1.2rem + env(safe-area-inset-bottom));
+}
+
+.word-sheet-word {
+  font-size: clamp(2.25rem, 9vw, 2.9rem);
+}
+
+.word-sheet-ipa {
+  padding: 0.15rem 0.72rem;
+  font-size: 1rem;
+}
+
+.word-sheet-actions {
+  gap: 0.6rem;
+  margin: 0.85rem 0 0.7rem;
+}
+
+.word-sheet-action {
+  min-height: 2.55rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.92rem;
+}
+
+.word-sheet-action-icon {
+  width: 1.12rem;
+  height: 1.12rem;
+}
+
+.word-sheet-senses {
+  margin-top: 0.25rem;
+}
+
+.word-sense {
+  grid-template-columns: minmax(3.6rem, auto) minmax(0, 1fr);
+  gap: 0.6rem;
+  padding: 0.58rem 0;
+}
+
+.word-sense-pos {
+  min-width: 3.6rem;
+  color: var(--accent-2-ink);
+  font-size: 0.94rem;
+}
+
+.word-sense-meaning {
+  font-size: 1.04rem;
+  line-height: 1.6;
+}
+
+.word-sheet-syllables {
+  margin-top: 0.85rem;
+  padding-top: 0.8rem;
+}
+
+.word-sheet-section-head {
+  justify-content: center;
+  margin-bottom: 0.55rem;
+  font-size: 0.84rem;
+}
+
+.word-sheet-syllable-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.word-sheet-syllable-list {
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.word-syllable {
+  min-width: 3rem;
+  min-height: 2.7rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 1.18rem;
+}
+
+.word-sheet-syllable-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 1px solid #e5eaf2;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--accent-dark);
+}
+
+.word-sheet-syllable-all .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.word-sheet-syllable-all:hover,
+.word-sheet-syllable-all:focus-visible {
+  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.word-sheet-syllable-all:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.word-sheet-assess {
+  justify-content: center;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+}
+
+.word-sheet-assess-button {
+  min-height: 2.75rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
+
+.word-sheet-assess .assess-result {
+  display: inline-block;
+  min-width: 3.2rem;
+  font-size: 1.28rem;
+  font-weight: 750;
+  text-align: left;
+}
+
+.word-sheet-assess .assess-result[data-kind="warning"] {
+  color: var(--accent-3-ink);
+}
+
+.word-sheet-assess .assess-result[data-kind="success"] {
+  color: var(--accent-4-ink);
+}
+
+.word-sheet-status {
+  display: block;
+  min-height: 1.35rem;
+  margin-top: 0.55rem;
+}
+
+.word-sheet-status:empty {
+  display: block;
+}
+
+@media (max-width: 700px) {
+  .word-sheet-scroll {
+    padding-inline: 1rem;
+  }
+
+  .word-sheet-word {
+    font-size: 2.3rem;
+  }
+
+  .word-sheet-assess .assess-result {
+    font-size: 1.18rem;
   }
 }

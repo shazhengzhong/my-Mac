@@ -94,13 +94,23 @@
         </div>
 
         <div class="full-english-text">
-          {% for sentence in sentences %}
+          {% if bilingual_groups %}
+            {% for group in bilingual_groups %}
+              <p class="full-english-line karaoke-line" lang="en">
+                {% for sentence in group.sentences %}
+                  {% include "diaries/_word_line.html" with sentence=sentence word_class="full-english-word" %}{% if not forloop.last %} {% endif %}
+                {% endfor %}
+              </p>
+            {% endfor %}
+          {% elif sentences %}
             <p class="full-english-line karaoke-line" lang="en">
-              {% include "diaries/_word_line.html" with sentence=sentence word_class="full-english-word" %}
+              {% for sentence in sentences %}
+                {% include "diaries/_word_line.html" with sentence=sentence word_class="full-english-word" %}{% if not forloop.last %} {% endif %}
+              {% endfor %}
             </p>
-          {% empty %}
+          {% else %}
             <p class="full-english-line" lang="en">{{ current.english_text|linebreaksbr }}</p>
-          {% endfor %}
+          {% endif %}
         </div>
       </div>
     </section>
@@ -193,11 +203,22 @@
         <div class="word-sheet-syllables" data-word-sheet-syllables hidden>
           <div class="word-sheet-section-head">
             <span>音节</span>
-            <button class="word-sheet-syllable-all" type="button" data-word-sheet-syllable-all>
-              播放整词拼读
+          </div>
+          <div class="word-sheet-syllable-row">
+            <div class="word-sheet-syllable-list" data-word-sheet-syllable-list></div>
+            <button
+              class="word-sheet-syllable-all"
+              type="button"
+              data-word-sheet-syllable-all
+              aria-label="播放整词拼读"
+              title="播放整词拼读"
+            >
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"></path>
+                <path d="M15.5 8.7a4.8 4.8 0 0 1 0 6.6M18.2 6a8.3 8.3 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+              </svg>
             </button>
           </div>
-          <div class="word-sheet-syllable-list" data-word-sheet-syllable-list></div>
         </div>
 
         <div class="word-sheet-assess word-chip" data-word-sheet-assess hidden>
@@ -208,6 +229,7 @@
             data-assess-url=""
             data-idle-label="录音测评"
             data-done-label="重测"
+            data-score-only="true"
           >
             <svg class="icon icon-mic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"></rect>
@@ -225,10 +247,10 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="{% static 'js/word-assessor.js' %}?v=20261115a" defer></script>
+  <script src="{% static 'js/word-assessor.js' %}?v=20261115c" defer></script>
   <script src="{% static 'js/read-aloud.js' %}?v=20261115a" defer></script>
   <script src="{% static 'js/diary-reader.js' %}?v=20261115a" defer></script>
   <script src="{% static 'js/recording-delete.js' %}?v=20261101b" defer></script>
-  <script src="{% static 'js/word-card.js' %}?v=20261115c" defer></script>
+  <script src="{% static 'js/word-card.js' %}?v=20261115e" defer></script>
   <script src="{% static 'js/full-english.js' %}?v=20261115a" defer></script>
 {% endblock %}

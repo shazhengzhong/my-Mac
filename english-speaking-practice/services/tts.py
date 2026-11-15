@@ -573,6 +573,7 @@ class CosyVoiceTTSProvider:
         *,
         speed: str,
         style: str,
+        ssml: bool = False,
     ) -> TTSResult:
         payload = {
             "model": self.model,
@@ -584,6 +585,8 @@ class CosyVoiceTTSProvider:
                 "language_hints": ["en"],
             },
         }
+        if ssml:
+            payload["input"]["enable_ssml"] = True
         url = f"{self.base_url}{self._HTTP_PATH}"
         try:
             response = client.post(
@@ -805,6 +808,38 @@ class CosyVoiceTTSProvider:
             timings=ordered_timings,
         )
 
+    def synthesize_ssml(
+        self,
+        ssml_text: str,
+        *,
+        speed: str,
+        style: str,
+    ) -> TTSResult:
+        """Synthesize an explicitly marked SSML word correction."""
+        if not ssml_text or not ssml_text.strip():
+            raise TTSError("没有可朗读的文字。")
+        if self._client is not None:
+            return self._http_synthesize(
+                self._client,
+                ssml_text,
+                speed=speed,
+                style=style,
+                ssml=True,
+            )
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(self.timeout, connect=10.0)
+            ) as client:
+                return self._http_synthesize(
+                    client,
+                    ssml_text,
+                    speed=speed,
+                    style=style,
+                    ssml=True,
+                )
+        except httpx.HTTPError as exc:
+            raise TTSError("暂时无法连接阿里云语音服务，请检查网络后再试。") from exc
+
     def synthesize(
         self,
         text: str,
@@ -850,10 +885,25 @@ WORD_TTS_CONTEXTS = {
 }
 
 
+WORD_SSML_OVERRIDES = {
+    # Compound words that the isolated-word voice sometimes stresses oddly.
+    "riverside": (
+        '<speak><phoneme alphabet="cmu" ph="R IH1 V ER0 S AY2 D">'
+        "riverside</phoneme></speak>"
+    ),
+}
+
+
 def word_tts_context(word: str) -> str:
     """Return a carrier sentence for words the isolated-word voice misreads."""
     normalized = (word or "").strip().lower().replace("’", "'")
     return WORD_TTS_CONTEXTS.get(normalized, "")
+
+
+def word_tts_ssml(word: str) -> str:
+    """Return a forced-pronunciation SSML override for known problem words."""
+    normalized = (word or "").strip().lower().replace("’", "'")
+    return WORD_SSML_OVERRIDES.get(normalized, "")
 
 
 def tts_cache_key(
