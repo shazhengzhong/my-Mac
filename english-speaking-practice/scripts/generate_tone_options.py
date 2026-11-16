@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import struct
 import wave
 from pathlib import Path
@@ -220,6 +221,83 @@ def kalimba(first: float, second: float) -> list[float]:
     return buffer
 
 
+def music_box_note(frequency: float, duration: float = 0.90) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        envelope = (1.0 - math.exp(-time / 0.0012)) * math.exp(-6.5 * time)
+        value = (
+            math.sin(2 * math.pi * frequency * time)
+            + 0.30
+            * math.sin(2 * math.pi * frequency * 3 * time)
+            * math.exp(-14.0 * time)
+            + 0.10
+            * math.sin(2 * math.pi * frequency * 5 * time)
+            * math.exp(-20.0 * time)
+        )
+        result.append(value * envelope)
+    return result
+
+
+def music_box(first: float, second: float) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 1.05)
+    add_note(buffer, 0.0, music_box_note(first))
+    add_note(buffer, 0.24, music_box_note(second))
+    return buffer
+
+
+def vibraphone_note(frequency: float, duration: float = 1.25) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        tremolo = 0.78 + 0.22 * math.sin(2 * math.pi * 5.5 * time)
+        envelope = (1.0 - math.exp(-time / 0.006)) * math.exp(-2.2 * time)
+        value = (
+            math.sin(2 * math.pi * frequency * time)
+            + 0.12
+            * math.sin(2 * math.pi * frequency * 4 * time)
+            * math.exp(-7.0 * time)
+        )
+        result.append(value * envelope * tremolo)
+    return result
+
+
+def arpeggio(notes: tuple[float, float, float]) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 1.20)
+    for start, frequency in zip((0.0, 0.13, 0.26), notes):
+        add_note(buffer, start, marimba_note(frequency, duration=0.85))
+    return buffer
+
+
+def woodblock_tap(frequency: float, seed: int) -> list[float]:
+    rng = random.Random(seed)
+    duration = 0.22
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        attack = 1.0 - math.exp(-time / 0.001)
+        noise = rng.uniform(-1.0, 1.0) * math.exp(-55.0 * time)
+        body = (
+            math.sin(2 * math.pi * frequency * time)
+            + 0.35 * math.sin(2 * math.pi * frequency * 1.8 * time)
+        ) * math.exp(-28.0 * time)
+        result.append((0.35 * noise + body) * attack)
+    return result
+
+
+def woodblock(high: bool) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 0.55)
+    if high:
+        add_note(buffer, 0.0, woodblock_tap(720.0, 21))
+        add_note(buffer, 0.16, woodblock_tap(820.0, 22))
+    else:
+        add_note(buffer, 0.0, woodblock_tap(480.0, 23))
+    return buffer
+
+
 def main() -> None:
     candidates = {
         "01-marimba": (marimba(261.63, 392.00), marimba(392.00, 261.63)),
@@ -240,6 +318,19 @@ def main() -> None:
             kalimba(329.63, 392.00),
             kalimba(392.00, 329.63),
         ),
+        "07-music-box": (
+            music_box(329.63, 392.00),
+            music_box(392.00, 329.63),
+        ),
+        "08-vibraphone": (
+            vibraphone_note(392.00),
+            vibraphone_note(329.63),
+        ),
+        "09-arpeggio": (
+            arpeggio((261.63, 329.63, 392.00)),
+            arpeggio((392.00, 329.63, 261.63)),
+        ),
+        "10-woodblock": (woodblock(True), woodblock(False)),
     }
     for name, (high, low) in candidates.items():
         write_wav(f"{name}-high.wav", normalize(high))
