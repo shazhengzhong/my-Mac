@@ -259,41 +259,33 @@ public class MainActivity extends Activity {
     }
 
     private static short[] buildChime(boolean high) {
-        final double frequency = high ? 523.25 : 349.23;
-        final double duration = high ? 0.64 : 0.78;
+        final double frequency = high ? 440.0 : 349.23;
+        final double duration = high ? 0.76 : 0.82;
         final int count = (int) (CHIME_SAMPLE_RATE * duration);
         final double[] values = new double[count];
         double peak = 0.0;
         for (int index = 0; index < count; index += 1) {
             final double time = index / (double) CHIME_SAMPLE_RATE;
             final double remaining = duration - time;
-            double envelope = Math.min(1.0, time / 0.018) * Math.exp(-2.4 * time);
-            if (remaining < 0.03) {
-                envelope *= Math.max(0.0, remaining / 0.03);
+            double envelope = Math.min(1.0, time / 0.032) * Math.exp(-2.0 * time);
+            if (remaining < 0.045) {
+                envelope *= Math.max(0.0, remaining / 0.045);
             }
             final double value =
                     (Math.sin(2 * Math.PI * frequency * time)
-                                    + 0.10
+                                    + 0.035
                                             * Math.sin(
                                                     2
                                                             * Math.PI
                                                             * frequency
                                                             * 2
                                                             * time)
-                                            * Math.exp(-4.0 * time)
-                                    + 0.03
-                                            * Math.sin(
-                                                    2
-                                                            * Math.PI
-                                                            * frequency
-                                                            * 3
-                                                            * time)
-                                            * Math.exp(-6.0 * time))
+                                            * Math.exp(-5.0 * time))
                             * envelope;
             values[index] = value;
             peak = Math.max(peak, Math.abs(value));
         }
-        final double scale = (32_767 * 0.95) / Math.max(peak, 1e-9);
+        final double scale = (32_767 * 0.88) / Math.max(peak, 1e-9);
         final short[] samples = new short[count];
         for (int index = 0; index < count; index += 1) {
             final long value = Math.round(values[index] * scale);
