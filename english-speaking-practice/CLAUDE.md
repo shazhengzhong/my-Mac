@@ -34,8 +34,8 @@
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
 - 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
-- 测评提示音采用试听页 **11 号：美音语音鼓励**。`static/audio/assess-high.wav` 是女声 “Great!”，`assess-low.wav` 是女声 “Try again!”，由 CosyVoice 生成后统一归一化。浏览器只播放一份 HTML audio，避免语音副本互相干扰；Web Audio 只作后备。
-- Android 壳 1.15 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `MediaPlayer` 播放 APK 内置的同一套语音（`assets/assess_high.wav` / `assets/assess_low.wav`），走 `USAGE_ALARM` / `STREAM_ALARM` 音轨；壳内只播放原生语音，不叠加网页提示音。闹钟音量为 0 时回退到网页 WAV。
+- 测评提示音采用组合方案：高分（≥70）用试听页 **11 号美音语音 “Great!”**；低分（<70）用试听页 **1 号木琴的低分音**（G4→C4 下行）。`static/audio/assess-high.wav` / `assess-low.wav` 分别是这两段音频。浏览器只播放一份 HTML audio；Web Audio 只作后备。
+- Android 壳 1.16 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `MediaPlayer` 播放 APK 内置的 `assets/assess_high.wav` / `assets/assess_low.wav`，走 `USAGE_ALARM` / `STREAM_ALARM` 音轨；壳内只播放原生音频，不叠加网页提示音。闹钟音量为 0 时回退到网页 WAV。
 - 单词测评每日额度 `ASSESSMENT_DAILY_REQUEST_LIMIT` 默认 100 次（`.env` 和 `.env.example` 同步为 100）。
 - 单词发音个别词有 TTS 语调问题。`riverside` 已加 CMU SSML 发音覆盖；其他词如果仍不准，优先考虑换 Microsoft/Azure 音源，不要继续硬编码单个词。
 
@@ -51,7 +51,7 @@ python manage.py test
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.4:8443/`
-- Android WebView 壳 APK：`static/family-diary-1.15.apk`（版本 1.15，versionCode 16；测评提示音采用 11 号美音语音 “Great!” / “Try again!”，走原生 `MediaPlayer` 和 `STREAM_ALARM`）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`、`1.9`、`1.10`、`1.11`、`1.12`、`1.13`、`1.14` 仍保留。
+- Android WebView 壳 APK：`static/family-diary-1.16.apk`（版本 1.16，versionCode 17；高分用 11 号美音 “Great!”，低分用 1 号木琴下行音，走原生 `MediaPlayer` 和 `STREAM_ALARM`）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`、`1.9`、`1.10`、`1.11`、`1.12`、`1.13`、`1.14`、`1.15` 仍保留。
 
 ### 文档提醒
 
