@@ -8,9 +8,11 @@
 
   const MAX_SECONDS = 3;
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+  const TONE_COPIES = 3;
   let activeSession = null;
   let feedbackContext = null;
   let assessmentPlayer = null;
+  const tonePools = new Map();
 
   function ensureFeedbackContext() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -70,6 +72,52 @@
     }
   }
 
+  function tonePlayers(toneName) {
+    if (tonePools.has(toneName)) {
+      return tonePools.get(toneName);
+    }
+    const source = document.querySelector(`[data-assess-tone="${toneName}"]`);
+    const players = [];
+    if (source && source.parentNode) {
+      players.push(source);
+      // Several copies played together make the cue noticeably louder on
+      // phones whose WebView limits a single media element's output.
+      for (let index = 1; index < TONE_COPIES; index += 1) {
+        const clone = source.cloneNode(true);
+        clone.removeAttribute("data-assess-tone");
+        clone.setAttribute("aria-hidden", "true");
+        clone.hidden = true;
+        source.parentNode.insertBefore(clone, source.nextSibling);
+        players.push(clone);
+      }
+    }
+    tonePools.set(toneName, players);
+    return players;
+  }
+
+  function playHtmlTone(score) {
+    const toneName = score < 70 ? "low" : "high";
+    const players = tonePlayers(toneName);
+    let played = false;
+    players.forEach((player) => {
+      try {
+        player.pause();
+        player.currentTime = 0;
+        player.volume = 1.0;
+        const attempt = player.play();
+        if (attempt && typeof attempt.catch === "function") {
+          attempt.catch(() => {
+            // Keep the other copies playing if one is throttled.
+          });
+        }
+        played = true;
+      } catch (_error) {
+        // Try the remaining copies or Web Audio.
+      }
+    });
+    return played;
+  }
+
   function playNativeTone(score) {
     const bridge = window.FamilyFeedback;
     if (!bridge || typeof bridge.playAssessmentTone !== "function") {
@@ -85,26 +133,11 @@
   }
 
   function playScoreTone(score) {
-    if (playNativeTone(score)) {
-      return;
+    const nativePlayed = playNativeTone(score);
+    const htmlPlayed = playHtmlTone(score);
+    if (!nativePlayed && !htmlPlayed) {
+      playWebAudioTone(score);
     }
-    const toneName = score < 70 ? "low" : "high";
-    const player = document.querySelector(`[data-assess-tone="${toneName}"]`);
-    if (player) {
-      try {
-        player.pause();
-        player.currentTime = 0;
-        player.volume = 1.0;
-        const attempt = player.play();
-        if (attempt && typeof attempt.catch === "function") {
-          attempt.catch(() => playWebAudioTone(score));
-        }
-        return;
-      } catch (_error) {
-        // Fall back to Web Audio.
-      }
-    }
-    playWebAudioTone(score);
   }
 
   function unitFor(button) {
@@ -487,4 +520,8 @@
       void start(button);
     });
   });
+
+  // Preload the extra cue copies so the first assessment is not delayed.
+  tonePlayers("low");
+  tonePlayers("high");
 })();

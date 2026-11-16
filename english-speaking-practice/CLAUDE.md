@@ -34,7 +34,7 @@
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
 - 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
-- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`（峰值接近满幅、谐波更丰富、时长加长），浏览器通过 HTML audio 播放，Web Audio 只作后备。Android 壳 1.9 起额外提供 `FamilyFeedback.playAssessmentTone()` 原生 `ToneGenerator` 提示音；壳内优先用原生提示音，浏览器仍用 WAV。
+- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`（方波谐波、峰值接近满幅、时长加长）。浏览器会同时播放 3 份 HTML audio 副本以突破 WebView 单媒体元素的音量限制，Web Audio 只作后备。Android 壳 1.10 起额外提供 `FamilyFeedback.playAssessmentTone()` 原生 `ToneGenerator` 提示音，走 `STREAM_ALARM` 音轨；壳内原生提示音和 HTML 副本会同时播放。
 - 单词发音个别词有 TTS 语调问题。`riverside` 已加 CMU SSML 发音覆盖；其他词如果仍不准，优先考虑换 Microsoft/Azure 音源，不要继续硬编码单个词。
 
 ### 运行与验证
@@ -49,7 +49,7 @@ python manage.py test
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.4:8443/`
-- Android WebView 壳 APK：`static/family-diary-1.9.apk`（版本 1.9，versionCode 10；新增测评提示音原生桥接 `FamilyFeedback`，浏览器端功能不变）。最新下载副本：`static/family-diary.apk`；旧版 `1.8` 仍保留。
+- Android WebView 壳 APK：`static/family-diary-1.10.apk`（版本 1.10，versionCode 11；测评提示音原生桥接 `FamilyFeedback`，走 `STREAM_ALARM`）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`、`1.9` 仍保留。
 
 ### 文档提醒
 

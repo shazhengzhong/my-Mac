@@ -74,7 +74,10 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
         try {
-            feedbackTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
+            // Use the alarm stream: it stays audible when the WebView's media
+            // output is turned down, and is still controlled by the phone's
+            // alarm-volume setting.
+            feedbackTone = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
         } catch (RuntimeException ignored) {
             // Fall back to the HTML audio cue when the device has no tone generator.
         }
