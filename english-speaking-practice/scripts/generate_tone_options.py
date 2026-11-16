@@ -298,6 +298,190 @@ def woodblock(high: bool) -> list[float]:
     return buffer
 
 
+def guitar_note(frequency: float, seed: int, duration: float = 0.95) -> list[float]:
+    rng = random.Random(seed)
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        attack = min(1.0, time / 0.0015)
+        noise = rng.uniform(-1.0, 1.0) * math.exp(-60.0 * time)
+        value = 0.18 * noise
+        for harmonic in range(1, 8):
+            value += (
+                (1.0 / harmonic)
+                * math.sin(2 * math.pi * frequency * harmonic * time)
+                * math.exp(-(1.4 + 0.55 * harmonic) * time)
+            )
+        result.append(value * attack)
+    return result
+
+
+def guitar(first: float, second: float, seed: int) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 1.10)
+    add_note(buffer, 0.0, guitar_note(first, seed))
+    add_note(buffer, 0.22, guitar_note(second, seed + 1))
+    return buffer
+
+
+def handpan_note(frequency: float, duration: float = 1.45) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    partials = ((1.0, 1.00, 1.4), (2.0, 0.48, 2.0), (2.9, 0.24, 2.8), (4.2, 0.12, 3.8))
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        envelope = (1.0 - math.exp(-time / 0.012)) * math.exp(-1.7 * time)
+        value = 0.0
+        for ratio, amplitude, decay in partials:
+            value += amplitude * math.sin(
+                2 * math.pi * frequency * ratio * time
+            ) * math.exp(-decay * time)
+        result.append(value * envelope)
+    return result
+
+
+def singing_bowl(frequency: float, duration: float = 1.65) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    partials = ((1.0, 1.0, 1.1), (1.5, 0.35, 1.5), (2.0, 0.18, 2.0), (2.7, 0.08, 2.6))
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        envelope = (1.0 - math.exp(-time / 0.05)) * math.exp(-1.6 * time)
+        value = 0.0
+        for ratio, amplitude, decay in partials:
+            beat = 0.35 * math.sin(2 * math.pi * 0.7 * time)
+            value += amplitude * math.sin(
+                2 * math.pi * frequency * ratio * time + beat
+            ) * math.exp(-decay * time)
+        result.append(value * envelope)
+    return result
+
+
+def bubble_drop(start: float, end: float, duration: float = 0.42) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    phase = 0.0
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        frequency = start + (end - start) * (1.0 - math.exp(-time / 0.04))
+        phase += 2 * math.pi * frequency / SAMPLE_RATE
+        envelope = (1.0 - math.exp(-time / 0.003)) * math.exp(-8.5 * time)
+        result.append(
+            (math.sin(phase) + 0.04 * math.sin(2 * phase)) * envelope
+        )
+    return result
+
+
+def bubbles(high: bool) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 0.90)
+    if high:
+        add_note(buffer, 0.0, bubble_drop(220.0, 540.0))
+        add_note(buffer, 0.28, bubble_drop(250.0, 580.0))
+    else:
+        add_note(buffer, 0.0, bubble_drop(150.0, 380.0, duration=0.52))
+    return buffer
+
+
+def shaker_hit(seed: int, duration: float = 0.22) -> list[float]:
+    rng = random.Random(seed)
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    previous = 0.0
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        noise = rng.uniform(-1.0, 1.0)
+        high_pass = noise - previous * 0.92
+        previous = noise
+        envelope = (1.0 - math.exp(-time / 0.0015)) * math.exp(-30.0 * time)
+        result.append(high_pass * envelope)
+    return result
+
+
+def shaker(high: bool) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 0.60)
+    if high:
+        add_note(buffer, 0.0, shaker_hit(31))
+        add_note(buffer, 0.18, shaker_hit(32))
+    else:
+        add_note(buffer, 0.0, shaker_hit(33, duration=0.30))
+    return buffer
+
+
+def soft_drum(frequency: float, duration: float = 0.45) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    phase = 0.0
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        phase += 2 * math.pi * (frequency * math.exp(-1.8 * time)) / SAMPLE_RATE
+        envelope = (1.0 - math.exp(-time / 0.002)) * math.exp(-9.0 * time)
+        result.append(math.sin(phase) * envelope)
+    return result
+
+
+def soft_drums(high: bool) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 0.65)
+    if high:
+        add_note(buffer, 0.0, soft_drum(180.0))
+        add_note(buffer, 0.20, soft_drum(155.0))
+    else:
+        add_note(buffer, 0.0, soft_drum(120.0, duration=0.55))
+    return buffer
+
+
+def wind_chime_note(frequency: float, seed: int, duration: float = 1.35) -> list[float]:
+    rng = random.Random(seed)
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    partials = ((1.0, 1.0, 1.2), (2.4, 0.30, 2.2), (3.7, 0.12, 3.0), (5.1, 0.05, 3.8))
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        envelope = (1.0 - math.exp(-time / 0.008)) * math.exp(-2.0 * time)
+        value = 0.0
+        for ratio, amplitude, decay in partials:
+            value += amplitude * math.sin(
+                2 * math.pi * frequency * ratio * time
+            ) * math.exp(-decay * time)
+        result.append(value * envelope)
+    return result
+
+
+def wind_chime(high: bool) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 1.45)
+    if high:
+        add_note(buffer, 0.0, wind_chime_note(392.0, 41))
+        add_note(buffer, 0.20, wind_chime_note(329.63, 42))
+    else:
+        add_note(buffer, 0.0, wind_chime_note(329.63, 43))
+    return buffer
+
+
+def whistle(frequency: float, duration: float = 0.80) -> list[float]:
+    result: list[float] = []
+    count = int(SAMPLE_RATE * duration)
+    for index in range(count):
+        time = index / SAMPLE_RATE
+        vibrato = 0.012 * math.sin(2 * math.pi * 4.8 * time)
+        envelope = min(1.0, time / 0.04) * math.exp(-2.8 * time)
+        value = math.sin(2 * math.pi * frequency * (1 + vibrato) * time)
+        result.append(value * envelope)
+    return result
+
+
+def whistles(first: float, second: float) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 1.10)
+    add_note(buffer, 0.0, whistle(first))
+    add_note(buffer, 0.28, whistle(second))
+    return buffer
+
+
+def music_box_arpeggio(notes: tuple[float, float, float]) -> list[float]:
+    buffer = [0.0] * int(SAMPLE_RATE * 1.25)
+    for start, frequency in zip((0.0, 0.13, 0.26), notes):
+        add_note(buffer, start, music_box_note(frequency, duration=0.95))
+    return buffer
+
+
 def main() -> None:
     candidates = {
         "01-marimba": (marimba(261.63, 392.00), marimba(392.00, 261.63)),
@@ -331,6 +515,34 @@ def main() -> None:
             arpeggio((392.00, 329.63, 261.63)),
         ),
         "10-woodblock": (woodblock(True), woodblock(False)),
+        "13-guitar": (
+            guitar(261.63, 392.00, 51),
+            guitar(392.00, 261.63, 53),
+        ),
+        "14-piano-single": (
+            piano_note(261.63, duration=1.55, level=1.0),
+            piano_note(220.00, duration=1.65, level=1.0),
+        ),
+        "15-handpan": (
+            handpan_note(392.00),
+            handpan_note(329.63),
+        ),
+        "16-singing-bowl": (
+            singing_bowl(329.63),
+            singing_bowl(261.63),
+        ),
+        "17-bubble": (bubbles(True), bubbles(False)),
+        "18-shaker": (shaker(True), shaker(False)),
+        "19-soft-drum": (soft_drums(True), soft_drums(False)),
+        "20-wind-chime": (wind_chime(True), wind_chime(False)),
+        "21-whistle": (
+            whistles(261.63, 329.63),
+            whistles(329.63, 261.63),
+        ),
+        "22-music-box-arpeggio": (
+            music_box_arpeggio((261.63, 329.63, 392.00)),
+            music_box_arpeggio((392.00, 329.63, 261.63)),
+        ),
     }
     for name, (high, low) in candidates.items():
         write_wav(f"{name}-high.wav", normalize(high))
