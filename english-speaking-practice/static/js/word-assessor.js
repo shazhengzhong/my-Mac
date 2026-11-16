@@ -8,7 +8,7 @@
 
   const MAX_SECONDS = 3;
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-  const TONE_COPIES = 3;
+  const TONE_COPIES = 1;
   let activeSession = null;
   let feedbackContext = null;
   let assessmentPlayer = null;
@@ -80,8 +80,8 @@
     const players = [];
     if (source && source.parentNode) {
       players.push(source);
-      // Several copies played together make the cue noticeably louder on
-      // phones whose WebView limits a single media element's output.
+      // The selected cue is a spoken phrase. Use one HTML copy when the
+      // native Android player is unavailable so the words stay clear.
       for (let index = 1; index < TONE_COPIES; index += 1) {
         const clone = source.cloneNode(true);
         clone.removeAttribute("data-assess-tone");

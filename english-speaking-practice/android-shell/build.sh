@@ -26,6 +26,7 @@ aapt2 link \
   --java "$BUILD_DIR/gen" \
   --min-sdk-version 24 \
   --target-sdk-version 35 \
+  -A "$ROOT_DIR/assets" \
   "$BUILD_DIR/res.zip"
 
 echo "Compiling Java..."

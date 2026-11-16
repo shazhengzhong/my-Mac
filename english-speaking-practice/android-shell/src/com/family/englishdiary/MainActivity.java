@@ -6,14 +6,12 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.AssetFileDescriptor;
 import android.media.AudioAttributes;
-import android.media.AudioFormat;
 import android.media.AudioManager;
-import android.media.AudioTrack;
+import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.MediaStore;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -39,15 +37,12 @@ public class MainActivity extends Activity {
     private static final int REQUEST_CAMERA = 1004;
     private static final int REQUEST_CROP = 1005;
 
-    private static final int CHIME_SAMPLE_RATE = 24_000;
-
     private WebView webView;
     private ValueCallback<Uri[]> pendingFileCallback;
     private PermissionRequest pendingPermissionRequest;
     private Uri pendingCameraUri;
     private Uri pendingCropOutputUri;
-    private volatile AudioTrack feedbackTrack;
-    private final Handler feedbackHandler = new Handler(Looper.getMainLooper());
+    private volatile MediaPlayer feedbackPlayer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -169,11 +164,11 @@ public class MainActivity extends Activity {
     private final class FeedbackBridge {
         @JavascriptInterface
         public boolean playAssessmentTone(String kind) {
-            return playChime(!"low".equals(kind));
+            return playSpeech(!"low".equals(kind));
         }
     }
 
-    private boolean playChime(boolean high) {
+    private boolean playSpeech(boolean high) {
         AudioManager audioManager =
                 (AudioManager) getSystemService(AUDIO_SERVICE);
         if (audioManager == null) {
@@ -184,120 +179,72 @@ public class MainActivity extends Activity {
                 return false;
             }
         } catch (RuntimeException ignored) {
-            // Continue and let AudioTrack decide; the HTML cue is the fallback.
+            // Continue and let MediaPlayer decide; the HTML cue is the fallback.
         }
-        releaseFeedbackTrack();
-        final short[] samples = buildChime(high);
+        releaseFeedbackPlayer();
+        final String asset = high ? "assess_high.wav" : "assess_low.wav";
+        AssetFileDescriptor descriptor = null;
+        MediaPlayer player = null;
         try {
-            AudioTrack track =
-                    new AudioTrack.Builder()
-                            .setAudioAttributes(
-                                    new AudioAttributes.Builder()
-                                            .setUsage(AudioAttributes.USAGE_ALARM)
-                                            .setContentType(
-                                                    AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                            .build())
-                            .setAudioFormat(
-                                    new AudioFormat.Builder()
-                                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                            .setSampleRate(CHIME_SAMPLE_RATE)
-                                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                                            .build())
-                            .setBufferSizeInBytes(samples.length * 2)
-                            .setTransferMode(AudioTrack.MODE_STATIC)
-                            .build();
-            if (track.getState() != AudioTrack.STATE_INITIALIZED) {
-                track.release();
-                return false;
-            }
-            if (track.write(samples, 0, samples.length) <= 0) {
-                track.release();
-                return false;
-            }
-            track.setVolume(1.0f);
-            track.play();
-            feedbackTrack = track;
-            feedbackHandler.postDelayed(
-                    () -> {
-                        if (feedbackTrack == track) {
-                            feedbackTrack = null;
-                            releaseTrack(track);
+            descriptor = getAssets().openFd(asset);
+            player = new MediaPlayer();
+            player.setAudioAttributes(
+                    new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build());
+            player.setDataSource(
+                    descriptor.getFileDescriptor(),
+                    descriptor.getStartOffset(),
+                    descriptor.getLength());
+            descriptor.close();
+            descriptor = null;
+            player.prepare();
+            player.setOnCompletionListener(
+                    completed -> {
+                        if (feedbackPlayer == completed) {
+                            feedbackPlayer = null;
+                            completed.release();
                         }
-                    },
-                    1_200);
+                    });
+            player.start();
+            feedbackPlayer = player;
             return true;
-        } catch (RuntimeException exception) {
+        } catch (Exception exception) {
+            if (descriptor != null) {
+                try {
+                    descriptor.close();
+                } catch (Exception ignored) {
+                    // Ignore cleanup failures.
+                }
+            }
+            if (player != null) {
+                try {
+                    player.release();
+                } catch (Exception ignored) {
+                    // Ignore cleanup failures.
+                }
+            }
             return false;
         }
     }
 
-    private void releaseFeedbackTrack() {
-        AudioTrack track = feedbackTrack;
-        feedbackTrack = null;
-        releaseTrack(track);
-    }
-
-    private static void releaseTrack(AudioTrack track) {
-        if (track == null) {
+    private void releaseFeedbackPlayer() {
+        MediaPlayer player = feedbackPlayer;
+        feedbackPlayer = null;
+        if (player == null) {
             return;
         }
         try {
-            track.pause();
-        } catch (RuntimeException ignored) {
-            // The track may already be stopped.
+            player.stop();
+        } catch (Exception ignored) {
+            // The player may already be stopped.
         }
         try {
-            track.flush();
-        } catch (RuntimeException ignored) {
-            // The track may already be released.
-        }
-        try {
-            track.release();
-        } catch (RuntimeException ignored) {
+            player.release();
+        } catch (Exception ignored) {
             // Ignore cleanup failures.
         }
-    }
-
-    private static short[] buildChime(boolean high) {
-        final double first = high ? 293.66 : 392.00;
-        final double second = high ? 392.00 : 293.66;
-        final double duration = 1.05;
-        final int count = (int) (CHIME_SAMPLE_RATE * duration);
-        final double[] values = new double[count];
-        double peak = 0.0;
-        for (int index = 0; index < count; index += 1) {
-            final double time = index / (double) CHIME_SAMPLE_RATE;
-            final double value =
-                    chimeNote(first, time, 0.0, 0.84)
-                            + chimeNote(second, time, 0.24, 0.78);
-            values[index] = value;
-            peak = Math.max(peak, Math.abs(value));
-        }
-        final double scale = (32_767 * 0.95) / Math.max(peak, 1e-9);
-        final short[] samples = new short[count];
-        for (int index = 0; index < count; index += 1) {
-            final long value = Math.round(values[index] * scale);
-            samples[index] = (short) Math.max(-32_768, Math.min(32_767, value));
-        }
-        return samples;
-    }
-
-    private static double chimeNote(
-            double frequency, double time, double start, double duration) {
-        final double local = time - start;
-        if (local < 0.0 || local >= duration) {
-            return 0.0;
-        }
-        final double remaining = duration - local;
-        double envelope = Math.min(1.0, local / 0.022) * Math.exp(-2.2 * local);
-        if (remaining < 0.045) {
-            envelope *= Math.max(0.0, remaining / 0.045);
-        }
-        return (Math.sin(2 * Math.PI * frequency * local)
-                        + 0.025
-                                * Math.sin(2 * Math.PI * frequency * 2 * local)
-                                * Math.exp(-5.0 * local))
-                * envelope;
     }
 
     @Override
@@ -482,8 +429,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        feedbackHandler.removeCallbacksAndMessages(null);
-        releaseFeedbackTrack();
+        releaseFeedbackPlayer();
         if (webView != null) {
             webView.loadUrl("about:blank");
             webView.destroy();
