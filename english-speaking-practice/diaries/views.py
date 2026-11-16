@@ -856,9 +856,6 @@ def generate_sentence_tts(request, sentence_id, speed):
 @login_required
 @require_POST
 @never_cache
-@login_required
-@require_POST
-@never_cache
 def word_card(request, token_id):
     """Return the dictionary card for a diary word, creating senses on demand."""
     token = _owned_token(request, token_id)

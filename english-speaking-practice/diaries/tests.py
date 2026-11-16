@@ -214,14 +214,18 @@ class TextServiceTests(TestCase):
     def test_empty_text(self):
         self.assertEqual(split_english_sentences(" \n "), [])
 
-    def test_chinese_paragraph_indices_follow_source_lines(self):
+    def test_chinese_paragraph_indices_follow_blank_line_paragraphs(self):
         self.assertEqual(
             chinese_paragraph_indices("第一句。第二句。\n第三句。"),
-            [0, 0, 1],
+            [0, 0, 0],
         )
         self.assertEqual(
             chinese_paragraph_indices("第一句。\n\n第二句。"),
             [0, 1],
+        )
+        self.assertEqual(
+            chinese_paragraph_indices("第一句。\n第二句。\n\n第三句。"),
+            [0, 0, 1],
         )
         self.assertEqual(
             chinese_paragraph_indices("第一句。第二句。"),
@@ -690,10 +694,10 @@ class TranslationFlowTests(DiaryFixtureMixin, TestCase):
         self.assertNotContains(detail, "data-practice-modal")
         self.assertNotContains(detail, "bilingual-group-link")
 
-    def test_full_english_uses_source_line_paragraphs(self):
+    def test_full_english_uses_blank_line_paragraphs(self):
         diary = make_diary(
             self.owner,
-            chinese_text="第一句。第二句。\n第三句。",
+            chinese_text="第一句。第二句。\n\n第三句。",
         )
         create_aligned_english_version(
             diary,
@@ -2040,6 +2044,11 @@ class CosyVoiceTTSServiceTests(TestCase):
                                                 "text": " there",
                                                 "begin_time": 400,
                                                 "end_time": 900,
+                                            },
+                                            {
+                                                "text": "Hello",
+                                                "begin_time": 0,
+                                                "end_time": 600,
                                             },
                                         ]
                                     }

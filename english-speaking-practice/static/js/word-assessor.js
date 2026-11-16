@@ -70,7 +70,24 @@
     }
   }
 
+  function playNativeTone(score) {
+    const bridge = window.FamilyFeedback;
+    if (!bridge || typeof bridge.playAssessmentTone !== "function") {
+      return false;
+    }
+    try {
+      return Boolean(
+        bridge.playAssessmentTone(score < 70 ? "low" : "high"),
+      );
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function playScoreTone(score) {
+    if (playNativeTone(score)) {
+      return;
+    }
     const toneName = score < 70 ? "low" : "high";
     const player = document.querySelector(`[data-assess-tone="${toneName}"]`);
     if (player) {

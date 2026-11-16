@@ -8,7 +8,7 @@
 - 当前应用名：**英语口语练习**；PWA 短名称：**口语练习**。
 - 这个目录不是 git 仓库。不要假设有版本控制；不要删除日记、录音、`private_media`、`.env`、`.bak` 或旧的 APK，除非用户明确要求。
 
-## 当前实际状态（2026-11-15）
+## 当前实际状态（2026-11-16）
 
 ### 界面
 
@@ -16,11 +16,11 @@
 - 视觉方向：近白底 + 轻蓝/轻粉/薄荷渐变，白卡片，蓝色主色，珊瑚/琥珀/薄荷/紫色点缀；按钮小而简洁，间距紧凑。
 - 手机端顶部导航隐藏重复的「首页 / 邀请家人 / 成员」入口，这些入口仍在首页卡片中。
 - 当前图标：方案 **08 双语气泡**（白底，蓝色大气泡 + 珊瑚色小气泡）。
-- 日记详情页：上方“阅读”卡片（默认全英文、可切换全中文/全英文，可收起；全英文按原中文行/段落换行，全文正常/慢速朗读、逐词高亮、单词可点）；下方“中英对照”卡片（每句正常/慢读 + 整句录音 + 录音历史，单词可点）。
+- 日记详情页：上方“阅读”卡片（默认全英文、可切换全中文/全英文，可收起；全英文按空行分段，同一段内自动折行，全文正常/慢速朗读、逐词高亮、单词可点）；下方“中英对照”卡片（每句正常/慢读 + 整句录音 + 录音历史，单词可点）。
 - 正文不显示音标；点击单词从底部弹出半屏单词卡，卡内显示音标、中文词性/释义、单词发音/循环、单分数录音测评 + 录音回放、居中音节播放，支持向下滑关闭。
 - 旧的独立练习弹层、正文音标、中文释义朗读按钮、`view-mode` 切换均已移除。
 - 单词卡不显示“播放中/播放完毕”文字；底部状态区预留高度，避免上下闪跳。
-- 朗读中的当前词用蓝色高亮，已读过的词不变暗；句子 TTS 时间戳会先按词对齐，再回退到长度估算。
+- 朗读中的当前词用蓝色高亮，已读过的词变蓝色字、不变暗；句子和全文 TTS 时间戳统一由 `static/js/tts-timings.js` 对齐。CosyVoice 的原始时间戳会出现重复词、跨句合并词（如 `freshI`）和省略号标点，时间轴脚本会去重、把合并词按字符比例拆开、跳过无法匹配的碎片，并在词与词之间补间，不再整段回退到按长度估算。
 - 图标预览页：`static/icon-options/index.html`。
 - PWA / 苹果主屏 / favicon / Android 图标都在 `static/icons/`，Android 壳图标在 `android-shell/res/mipmap-xxxhdpi/ic_launcher.png`。
 
@@ -34,7 +34,7 @@
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
 - 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
-- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`，通过 HTML audio 播放以兼容华为 WebView；音量已调高，Web Audio 只作后备。
+- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`（峰值接近满幅、谐波更丰富、时长加长），浏览器通过 HTML audio 播放，Web Audio 只作后备。Android 壳 1.9 起额外提供 `FamilyFeedback.playAssessmentTone()` 原生 `ToneGenerator` 提示音；壳内优先用原生提示音，浏览器仍用 WAV。
 - 单词发音个别词有 TTS 语调问题。`riverside` 已加 CMU SSML 发音覆盖；其他词如果仍不准，优先考虑换 Microsoft/Azure 音源，不要继续硬编码单个词。
 
 ### 运行与验证
@@ -49,7 +49,7 @@ python manage.py test
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.4:8443/`
-- Android WebView 壳 APK：`static/family-diary-1.8.apk`（版本 1.8，versionCode 9；已移除未使用的中文 TTS 桥接）。
+- Android WebView 壳 APK：`static/family-diary-1.9.apk`（版本 1.9，versionCode 10；新增测评提示音原生桥接 `FamilyFeedback`，浏览器端功能不变）。最新下载副本：`static/family-diary.apk`；旧版 `1.8` 仍保留。
 
 ### 文档提醒
 

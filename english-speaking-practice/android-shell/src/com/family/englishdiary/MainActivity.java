@@ -6,11 +6,14 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
@@ -37,6 +40,7 @@ public class MainActivity extends Activity {
     private PermissionRequest pendingPermissionRequest;
     private Uri pendingCameraUri;
     private Uri pendingCropOutputUri;
+    private ToneGenerator feedbackTone;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +72,13 @@ public class MainActivity extends Activity {
 
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+
+        try {
+            feedbackTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
+        } catch (RuntimeException ignored) {
+            // Fall back to the HTML audio cue when the device has no tone generator.
+        }
+        webView.addJavascriptInterface(new FeedbackBridge(), "FamilyFeedback");
 
         webView.setWebViewClient(
                 new WebViewClient() {
@@ -151,6 +162,28 @@ public class MainActivity extends Activity {
                 });
 
         webView.loadUrl(START_URL);
+    }
+
+    private final class FeedbackBridge {
+        @JavascriptInterface
+        public boolean playAssessmentTone(String kind) {
+            if (feedbackTone == null) {
+                return false;
+            }
+            final int tone =
+                    "low".equals(kind)
+                            ? ToneGenerator.TONE_PROP_NACK
+                            : ToneGenerator.TONE_PROP_ACK;
+            runOnUiThread(
+                    () -> {
+                        try {
+                            feedbackTone.startTone(tone, 700);
+                        } catch (RuntimeException ignored) {
+                            // Keep the page responsive if the tone stream is busy.
+                        }
+                    });
+            return true;
+        }
     }
 
     @Override
@@ -335,6 +368,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (feedbackTone != null) {
+            feedbackTone.release();
+            feedbackTone = null;
+        }
         if (webView != null) {
             webView.loadUrl("about:blank");
             webView.destroy();

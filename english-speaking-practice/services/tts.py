@@ -705,7 +705,7 @@ class CosyVoiceTTSProvider:
         }
 
         audio = bytearray()
-        timings: dict[tuple[str, int, int], dict] = {}
+        timings: dict[tuple[str, int], dict] = {}
         started = False
         sent_text = False
 
@@ -768,11 +768,14 @@ class CosyVoiceTTSProvider:
                     word = word.strip()
                     if not word or end_ms < start_ms:
                         continue
-                    timings[(word, start_ms, end_ms)] = {
-                        "word": word,
-                        "start_ms": start_ms,
-                        "end_ms": end_ms,
-                    }
+                    key = (word, start_ms)
+                    existing = timings.get(key)
+                    if existing is None or end_ms < existing["end_ms"]:
+                        timings[key] = {
+                            "word": word,
+                            "start_ms": start_ms,
+                            "end_ms": end_ms,
+                        }
         except TTSError:
             raise
         except websocket.WebSocketTimeoutException as exc:

@@ -1865,7 +1865,7 @@ body.word-sheet-open {
 
 .full-english-text .karaoke-word.karaoke-done,
 .practice-en .karaoke-word.karaoke-done {
-  color: inherit;
+  color: var(--accent);
   background: transparent;
   box-shadow: none;
 }

@@ -80,22 +80,26 @@ def split_chinese_sentences(text: str) -> list[str]:
 
 
 def chinese_paragraph_indices(text: str) -> list[int]:
-    """Map each Chinese sentence to its source line/paragraph.
+    """Map each Chinese sentence to its blank-line-delimited paragraph.
 
     Existing English versions store only sentence groups, so this derives a
     stable paragraph grouping from the original diary text without a database
-    migration. Blank lines are ignored; each non-empty source line is a
-    paragraph, and multiple sentences on one line stay together.
+    migration. Consecutive non-empty lines belong to the same paragraph;
+    blank lines start a new paragraph.
     """
     normalized = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     indices: list[int] = []
     paragraph_index = 0
+    has_paragraph_content = False
     for raw_line in normalized.split("\n"):
         if not raw_line.strip():
+            if has_paragraph_content:
+                paragraph_index += 1
+                has_paragraph_content = False
             continue
         line_sentences = split_chinese_sentences(raw_line)
         if not line_sentences:
             continue
         indices.extend([paragraph_index] * len(line_sentences))
-        paragraph_index += 1
+        has_paragraph_content = True
     return indices
