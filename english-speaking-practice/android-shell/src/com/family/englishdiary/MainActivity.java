@@ -259,39 +259,45 @@ public class MainActivity extends Activity {
     }
 
     private static short[] buildChime(boolean high) {
-        final double frequency = high ? 440.0 : 349.23;
-        final double duration = high ? 0.76 : 0.82;
+        final double first = high ? 293.66 : 392.00;
+        final double second = high ? 392.00 : 293.66;
+        final double duration = 1.05;
         final int count = (int) (CHIME_SAMPLE_RATE * duration);
         final double[] values = new double[count];
         double peak = 0.0;
         for (int index = 0; index < count; index += 1) {
             final double time = index / (double) CHIME_SAMPLE_RATE;
-            final double remaining = duration - time;
-            double envelope = Math.min(1.0, time / 0.032) * Math.exp(-2.0 * time);
-            if (remaining < 0.045) {
-                envelope *= Math.max(0.0, remaining / 0.045);
-            }
             final double value =
-                    (Math.sin(2 * Math.PI * frequency * time)
-                                    + 0.035
-                                            * Math.sin(
-                                                    2
-                                                            * Math.PI
-                                                            * frequency
-                                                            * 2
-                                                            * time)
-                                            * Math.exp(-5.0 * time))
-                            * envelope;
+                    chimeNote(first, time, 0.0, 0.84)
+                            + chimeNote(second, time, 0.24, 0.78);
             values[index] = value;
             peak = Math.max(peak, Math.abs(value));
         }
-        final double scale = (32_767 * 0.88) / Math.max(peak, 1e-9);
+        final double scale = (32_767 * 0.95) / Math.max(peak, 1e-9);
         final short[] samples = new short[count];
         for (int index = 0; index < count; index += 1) {
             final long value = Math.round(values[index] * scale);
             samples[index] = (short) Math.max(-32_768, Math.min(32_767, value));
         }
         return samples;
+    }
+
+    private static double chimeNote(
+            double frequency, double time, double start, double duration) {
+        final double local = time - start;
+        if (local < 0.0 || local >= duration) {
+            return 0.0;
+        }
+        final double remaining = duration - local;
+        double envelope = Math.min(1.0, local / 0.022) * Math.exp(-2.2 * local);
+        if (remaining < 0.045) {
+            envelope *= Math.max(0.0, remaining / 0.045);
+        }
+        return (Math.sin(2 * Math.PI * frequency * local)
+                        + 0.025
+                                * Math.sin(2 * Math.PI * frequency * 2 * local)
+                                * Math.exp(-5.0 * local))
+                * envelope;
     }
 
     @Override
