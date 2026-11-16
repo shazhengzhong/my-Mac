@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>提示音试听 · 英语口语练习</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #e4e7ec;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --coral: #fb7185;
+      --mint: #34d399;
+      --amber: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, #eff6ff 0, transparent 34%),
+        radial-gradient(circle at 100% 18%, #fff1f2 0, transparent 32%),
+        #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    main {
+      width: min(100%, 760px);
+      margin: 0 auto;
+      padding: 28px 16px calc(36px + env(safe-area-inset-bottom));
+    }
+
+    header {
+      margin-bottom: 18px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--blue);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.45rem, 5vw, 2rem);
+      letter-spacing: -0.02em;
+    }
+
+    .lead {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.65;
+    }
+
+    .notice {
+      margin: 14px 0 20px;
+      padding: 11px 13px;
+      border: 1px solid #dbeafe;
+      border-radius: 14px;
+      background: var(--blue-soft);
+      color: #1e40af;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .card {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+    }
+
+    .number {
+      display: grid;
+      flex: 0 0 38px;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border-radius: 12px;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    .copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .name {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 750;
+    }
+
+    .description {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 7px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 8px 11px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 700;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    .good {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .good.is-playing {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .warning {
+      background: #fff1f2;
+      color: #be123c;
+    }
+
+    .warning.is-playing {
+      background: var(--coral);
+      color: #fff;
+    }
+
+    .status {
+      position: sticky;
+      bottom: 12px;
+      margin-top: 18px;
+      padding: 11px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      color: var(--muted);
+      font-size: 0.83rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .status strong {
+      color: var(--ink);
+    }
+
+    .stop {
+      margin-left: 8px;
+      padding: 5px 10px;
+      border-color: var(--line);
+      background: #fff;
+      color: var(--muted);
+    }
+
+    @media (max-width: 520px) {
+      .card {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .actions {
+        width: 100%;
+        padding-left: 51px;
+      }
+
+      .actions button {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">英语口语练习</p>
+      <h1>测评提示音试听</h1>
+      <p class="lead">
+        每个编号都有「高分」和「低分」两个版本。点按钮试听，记住最喜欢的编号，
+        回复我即可。最终会从选中的方案生成安卓和网页版提示音。
+      </p>
+    </header>
+
+    <p class="notice">
+      先把手机的媒体/闹钟音量调到平时听英语的音量。试听页每次只播放一份音频；
+      最终版本会根据安卓和浏览器分别做音量适配。
+    </p>
+
+    <section class="grid" aria-label="提示音候选">
+      <article class="card">
+        <div class="number">01</div>
+        <div class="copy">
+          <p class="name">木琴</p>
+          <p class="description">温暖、短促的木质敲击，两个音</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="01-marimba-high.wav" data-label="01 木琴 · 高分">高分</button>
+          <button type="button" class="warning" data-src="01-marimba-low.wav" data-label="01 木琴 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">02</div>
+        <div class="copy">
+          <p class="name">竖琴</p>
+          <p class="description">轻柔拨弦，两个音自然衔接</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="02-harp-high.wav" data-label="02 竖琴 · 高分">高分</button>
+          <button type="button" class="warning" data-src="02-harp-low.wav" data-label="02 竖琴 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">03</div>
+        <div class="copy">
+          <p class="name">钢琴和弦</p>
+          <p class="description">柔和的和弦，一次发声，没有音阶跳动</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="03-piano-high.wav" data-label="03 钢琴和弦 · 高分">高分</button>
+          <button type="button" class="warning" data-src="03-piano-low.wav" data-label="03 钢琴和弦 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">04</div>
+        <div class="copy">
+          <p class="name">绵软合成器</p>
+          <p class="description">慢起音的长和弦，最柔和、不刺耳</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="04-pad-high.wav" data-label="04 绵软合成器 · 高分">高分</button>
+          <button type="button" class="warning" data-src="04-pad-low.wav" data-label="04 绵软合成器 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">05</div>
+        <div class="copy">
+          <p class="name">水滴</p>
+          <p class="description">轻巧的“咚”声，短促、不占时间</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="05-water-high.wav" data-label="05 水滴 · 高分">高分</button>
+          <button type="button" class="warning" data-src="05-water-low.wav" data-label="05 水滴 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">06</div>
+        <div class="copy">
+          <p class="name">卡林巴</p>
+          <p class="description">拇指琴音色，柔和的金属木质混合感</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="06-kalimba-high.wav" data-label="06 卡林巴 · 高分">高分</button>
+          <button type="button" class="warning" data-src="06-kalimba-low.wav" data-label="06 卡林巴 · 低分">低分</button>
+        </div>
+      </article>
+    </section>
+
+    <p class="status" role="status" aria-live="polite">
+      <span id="status-text">还没有播放。点一个按钮试听。</span>
+      <button type="button" class="stop" id="stop-button">停止</button>
+    </p>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const statusText = document.getElementById("status-text");
+      const stopButton = document.getElementById("stop-button");
+      const players = new Map();
+      let current = null;
+      let currentLabel = "";
+
+      function clearPlaying() {
+        document.querySelectorAll("button.is-playing").forEach((button) => {
+          button.classList.remove("is-playing");
+        });
+      }
+
+      function stop() {
+        if (current) {
+          current.pause();
+          current.currentTime = 0;
+        }
+        current = null;
+        currentLabel = "";
+        clearPlaying();
+        statusText.textContent = "已停止。";
+      }
+
+      function play(button) {
+        const source = button.dataset.src;
+        const label = button.dataset.label || source;
+        if (!source) {
+          return;
+        }
+        if (current) {
+          current.pause();
+          current.currentTime = 0;
+        }
+        clearPlaying();
+
+        let audio = players.get(source);
+        if (!audio) {
+          audio = new Audio(source);
+          audio.preload = "auto";
+          audio.volume = 1.0;
+          players.set(source, audio);
+        }
+        current = audio;
+        currentLabel = label;
+        audio.currentTime = 0;
+        audio.onended = () => {
+          if (current === audio) {
+            current = null;
+            clearPlaying();
+          }
+        };
+        button.classList.add("is-playing");
+        statusText.textContent = `正在播放：${label}`;
+        audio.play().catch(() => {
+          clearPlaying();
+          statusText.textContent = "播放失败，请再点一次或刷新页面。";
+        });
+      }
+
+      document.querySelectorAll("button[data-src]").forEach((button) => {
+        button.addEventListener("click", () => play(button));
+      });
+      stopButton.addEventListener("click", stop);
+      window.addEventListener("pagehide", stop);
+    })();
+  </script>
+</body>
+</html>
