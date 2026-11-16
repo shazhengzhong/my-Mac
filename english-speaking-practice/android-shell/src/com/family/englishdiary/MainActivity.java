@@ -6,10 +6,14 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
 import android.media.AudioManager;
-import android.media.ToneGenerator;
+import android.media.AudioTrack;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -35,12 +39,15 @@ public class MainActivity extends Activity {
     private static final int REQUEST_CAMERA = 1004;
     private static final int REQUEST_CROP = 1005;
 
+    private static final int CHIME_SAMPLE_RATE = 24_000;
+
     private WebView webView;
     private ValueCallback<Uri[]> pendingFileCallback;
     private PermissionRequest pendingPermissionRequest;
     private Uri pendingCameraUri;
     private Uri pendingCropOutputUri;
-    private ToneGenerator feedbackTone;
+    private volatile AudioTrack feedbackTrack;
+    private final Handler feedbackHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,14 +80,6 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
-        try {
-            // Use the alarm stream: it stays audible when the WebView's media
-            // output is turned down, and is still controlled by the phone's
-            // alarm-volume setting.
-            feedbackTone = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
-        } catch (RuntimeException ignored) {
-            // Fall back to the HTML audio cue when the device has no tone generator.
-        }
         webView.addJavascriptInterface(new FeedbackBridge(), "FamilyFeedback");
 
         webView.setWebViewClient(
@@ -170,23 +169,137 @@ public class MainActivity extends Activity {
     private final class FeedbackBridge {
         @JavascriptInterface
         public boolean playAssessmentTone(String kind) {
-            if (feedbackTone == null) {
+            return playChime(!"low".equals(kind));
+        }
+    }
+
+    private boolean playChime(boolean high) {
+        AudioManager audioManager =
+                (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audioManager == null) {
+            return false;
+        }
+        try {
+            if (audioManager.getStreamVolume(AudioManager.STREAM_ALARM) == 0) {
                 return false;
             }
-            final int tone =
-                    "low".equals(kind)
-                            ? ToneGenerator.TONE_PROP_NACK
-                            : ToneGenerator.TONE_PROP_ACK;
-            runOnUiThread(
-                    () -> {
-                        try {
-                            feedbackTone.startTone(tone, 700);
-                        } catch (RuntimeException ignored) {
-                            // Keep the page responsive if the tone stream is busy.
-                        }
-                    });
-            return true;
+        } catch (RuntimeException ignored) {
+            // Continue and let AudioTrack decide; the HTML cue is the fallback.
         }
+        releaseFeedbackTrack();
+        final short[] samples = buildChime(high);
+        try {
+            AudioTrack track =
+                    new AudioTrack.Builder()
+                            .setAudioAttributes(
+                                    new AudioAttributes.Builder()
+                                            .setUsage(AudioAttributes.USAGE_ALARM)
+                                            .setContentType(
+                                                    AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                            .build())
+                            .setAudioFormat(
+                                    new AudioFormat.Builder()
+                                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                            .setSampleRate(CHIME_SAMPLE_RATE)
+                                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                            .build())
+                            .setBufferSizeInBytes(samples.length * 2)
+                            .setTransferMode(AudioTrack.MODE_STATIC)
+                            .build();
+            if (track.getState() != AudioTrack.STATE_INITIALIZED) {
+                track.release();
+                return false;
+            }
+            if (track.write(samples, 0, samples.length) <= 0) {
+                track.release();
+                return false;
+            }
+            track.setVolume(1.0f);
+            track.play();
+            feedbackTrack = track;
+            feedbackHandler.postDelayed(
+                    () -> {
+                        if (feedbackTrack == track) {
+                            feedbackTrack = null;
+                            releaseTrack(track);
+                        }
+                    },
+                    1_200);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private void releaseFeedbackTrack() {
+        AudioTrack track = feedbackTrack;
+        feedbackTrack = null;
+        releaseTrack(track);
+    }
+
+    private static void releaseTrack(AudioTrack track) {
+        if (track == null) {
+            return;
+        }
+        try {
+            track.pause();
+        } catch (RuntimeException ignored) {
+            // The track may already be stopped.
+        }
+        try {
+            track.flush();
+        } catch (RuntimeException ignored) {
+            // The track may already be released.
+        }
+        try {
+            track.release();
+        } catch (RuntimeException ignored) {
+            // Ignore cleanup failures.
+        }
+    }
+
+    private static short[] buildChime(boolean high) {
+        final double frequency = high ? 659.25 : 392.0;
+        final double duration = high ? 0.62 : 0.78;
+        final int count = (int) (CHIME_SAMPLE_RATE * duration);
+        final double[] values = new double[count];
+        double peak = 0.0;
+        for (int index = 0; index < count; index += 1) {
+            final double time = index / (double) CHIME_SAMPLE_RATE;
+            final double remaining = duration - time;
+            double envelope = Math.min(1.0, time / 0.007) * Math.exp(-3.1 * time);
+            if (remaining < 0.025) {
+                envelope *= Math.max(0.0, remaining / 0.025);
+            }
+            final double value =
+                    (Math.sin(2 * Math.PI * frequency * time)
+                                    + 0.26
+                                            * Math.sin(
+                                                    2
+                                                            * Math.PI
+                                                            * frequency
+                                                            * 2
+                                                            * time)
+                                            * Math.exp(-5.0 * time)
+                                    + 0.10
+                                            * Math.sin(
+                                                    2
+                                                            * Math.PI
+                                                            * frequency
+                                                            * 3
+                                                            * time)
+                                            * Math.exp(-7.0 * time))
+                            * envelope;
+            values[index] = value;
+            peak = Math.max(peak, Math.abs(value));
+        }
+        final double scale = (32_767 * 0.97) / Math.max(peak, 1e-9);
+        final short[] samples = new short[count];
+        for (int index = 0; index < count; index += 1) {
+            final long value = Math.round(values[index] * scale);
+            samples[index] = (short) Math.max(-32_768, Math.min(32_767, value));
+        }
+        return samples;
     }
 
     @Override
@@ -371,10 +484,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (feedbackTone != null) {
-            feedbackTone.release();
-            feedbackTone = null;
-        }
+        feedbackHandler.removeCallbacksAndMessages(null);
+        releaseFeedbackTrack();
         if (webView != null) {
             webView.loadUrl("about:blank");
             webView.destroy();

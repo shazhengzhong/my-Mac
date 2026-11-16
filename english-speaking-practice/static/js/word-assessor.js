@@ -133,9 +133,12 @@
   }
 
   function playScoreTone(score) {
-    const nativePlayed = playNativeTone(score);
-    const htmlPlayed = playHtmlTone(score);
-    if (!nativePlayed && !htmlPlayed) {
+    // The shell has a custom native chime.  Do not also play the HTML cue,
+    // otherwise the two different tones overlap into a repeated double beep.
+    if (playNativeTone(score)) {
+      return;
+    }
+    if (!playHtmlTone(score)) {
       playWebAudioTone(score);
     }
   }
