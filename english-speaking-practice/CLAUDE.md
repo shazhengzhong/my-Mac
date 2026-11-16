@@ -34,8 +34,9 @@
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
 - 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
-- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`，是低分 392Hz、高分 659.25Hz 的单音钟声（带轻微二/三次谐波），不再使用刺耳方波或连续高低音。浏览器会同时播放 3 份 HTML audio 副本以突破 WebView 单媒体元素的音量限制；Web Audio 只作后备。
-- Android 壳 1.11 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `AudioTrack` 合成同一套单音钟声，走 `STREAM_ALARM` 音轨；壳内只播放原生音，不再叠加网页提示音（1.10 会同时播放两套不同提示音，已修正）。闹钟音量为 0 时回退到网页 WAV。
+- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`，是低分 349.23Hz（F4）、高分 523.25Hz（C5）的单音柔和钟声；去掉了方波和强谐波，只保留很轻的二/三次谐波。浏览器会同时播放 3 份 HTML audio 副本以突破 WebView 单媒体元素的音量限制；Web Audio 只作后备。
+- Android 壳 1.12 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `AudioTrack` 合成同一套单音钟声，走 `STREAM_ALARM` 音轨；壳内只播放原生音，不再叠加网页提示音（1.10 会同时播放两套不同提示音，已修正）。闹钟音量为 0 时回退到网页 WAV。
+- 单词测评每日额度 `ASSESSMENT_DAILY_REQUEST_LIMIT` 默认 100 次（`.env` 和 `.env.example` 同步为 100）。
 - 单词发音个别词有 TTS 语调问题。`riverside` 已加 CMU SSML 发音覆盖；其他词如果仍不准，优先考虑换 Microsoft/Azure 音源，不要继续硬编码单个词。
 
 ### 运行与验证
@@ -50,7 +51,7 @@ python manage.py test
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.4:8443/`
-- Android WebView 壳 APK：`static/family-diary-1.11.apk`（版本 1.11，versionCode 12；测评提示音改为原生 `AudioTrack` 单音钟声，走 `STREAM_ALARM`，不再和网页提示音重叠）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`、`1.9`、`1.10` 仍保留。
+- Android WebView 壳 APK：`static/family-diary-1.12.apk`（版本 1.12，versionCode 13；测评提示音改为更柔和的 C5/F4 单音钟声，走原生 `AudioTrack` 和 `STREAM_ALARM`）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`、`1.9`、`1.10`、`1.11` 仍保留。
 
 ### 文档提醒
 

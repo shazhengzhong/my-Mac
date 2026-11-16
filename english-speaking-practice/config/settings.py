@@ -226,7 +226,7 @@ TTS_DAILY_CHAR_LIMIT = env_int("TTS_DAILY_CHAR_LIMIT", 5000)
 
 # Word-level pronunciation assessment. Mock by default; Tencent SOE when configured.
 ASSESSMENT_PROVIDER = os.getenv("ASSESSMENT_PROVIDER", "mock").strip().lower()
-ASSESSMENT_DAILY_REQUEST_LIMIT = env_int("ASSESSMENT_DAILY_REQUEST_LIMIT", 30)
+ASSESSMENT_DAILY_REQUEST_LIMIT = env_int("ASSESSMENT_DAILY_REQUEST_LIMIT", 100)
 TENCENTCLOUD_SECRET_ID = os.getenv("TENCENTCLOUD_SECRET_ID", "").strip()
 TENCENTCLOUD_SECRET_KEY = os.getenv("TENCENTCLOUD_SECRET_KEY", "").strip()
 TENCENT_SOE_APP_ID = os.getenv("TENCENT_SOE_APP_ID", "").strip()
