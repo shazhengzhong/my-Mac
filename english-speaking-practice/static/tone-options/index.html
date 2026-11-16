@@ -191,6 +191,46 @@
       color: var(--muted);
     }
 
+
+    .badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #15803d;
+      font-size: 0.65rem;
+      font-weight: 800;
+      vertical-align: 2px;
+    }
+
+    .jump {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: -8px 0 18px;
+    }
+
+    .jump a {
+      padding: 7px 11px;
+      border: 1px solid #dbeafe;
+      border-radius: 999px;
+      background: #fff;
+      color: #1d4ed8;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .group-title {
+      margin: 10px 2px 0;
+      scroll-margin-top: 12px;
+      color: #475569;
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
     @media (max-width: 520px) {
       .card {
         align-items: flex-start;
@@ -214,14 +254,20 @@
       <p class="eyebrow">英语口语练习</p>
       <h1>测评提示音试听</h1>
       <p class="lead">
-        每个编号都有「高分」和「低分」两个版本，共 22 组。点按钮试听，记住最喜欢的编号，
+        每个编号都有「高分」和「低分」两个版本，共 42 组。点按钮试听，记住最喜欢的编号，
         回复我即可。最终会从选中的方案生成安卓和网页版提示音。
       </p>
     </header>
 
     <p class="notice">
       先把手机的媒体/闹钟音量调到平时听英语的音量。试听页每次只播放一份音频；
-      最终版本会根据安卓和浏览器分别做音量适配。
+      最终版本会根据安卓和浏览器分别做音量适配。测评会反复出现，我更推荐
+      <strong>23、31、35、39</strong>：短、清晰、不疲劳；想听人声鼓励可以试 37–42。
+    </p>
+
+    <p class="jump">
+      <a href="#group-23">跳到 23–36 场景音</a>
+      <a href="#group-37">跳到 37–42 语音鼓励</a>
     </p>
 
     <section class="grid" aria-label="提示音候选">
@@ -486,6 +532,250 @@
         <div class="actions">
           <button type="button" class="good" data-src="22-music-box-arpeggio-high.wav" data-label="22 三音音乐盒 · 高分">高分</button>
           <button type="button" class="warning" data-src="22-music-box-arpeggio-low.wav" data-label="22 三音音乐盒 · 低分">低分</button>
+        </div>
+      </article>
+
+      <h2 class="group-title" id="group-23">更贴近测评场景（23–36）</h2>
+
+      <article class="card">
+        <div class="number">23</div>
+        <div class="copy">
+          <p class="name">木琴 · 大三度<span class="badge">推荐</span></p>
+          <p class="description">C4→E4 短促上行，明亮但不尖，低分反向</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="23-marimba-third-high.wav" data-label="23 木琴大三度 · 高分">高分</button>
+          <button type="button" class="warning" data-src="23-marimba-third-low.wav" data-label="23 木琴大三度 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">24</div>
+        <div class="copy">
+          <p class="name">木琴 · 低五度</p>
+          <p class="description">A3→E4，更低的两个音，厚实不吵</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="24-marimba-fifth-high.wav" data-label="24 木琴低五度 · 高分">高分</button>
+          <button type="button" class="warning" data-src="24-marimba-fifth-low.wav" data-label="24 木琴低五度 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">25</div>
+        <div class="copy">
+          <p class="name">音乐盒 · 单音</p>
+          <p class="description">只响一下，短而清亮，没有音阶进行</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="25-music-box-single-high.wav" data-label="25 音乐盒单音 · 高分">高分</button>
+          <button type="button" class="warning" data-src="25-music-box-single-low.wav" data-label="25 音乐盒单音 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">26</div>
+        <div class="copy">
+          <p class="name">钢琴 · 双音</p>
+          <p class="description">C4+E4 同时发声，温暖的和声音程</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="26-piano-double-high.wav" data-label="26 钢琴双音 · 高分">高分</button>
+          <button type="button" class="warning" data-src="26-piano-double-low.wav" data-label="26 钢琴双音 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">27</div>
+        <div class="copy">
+          <p class="name">竖琴 · 五声三音</p>
+          <p class="description">C-D-G 五声音阶，快速上行/下行</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="27-harp-pentatonic-high.wav" data-label="27 竖琴五声三音 · 高分">高分</button>
+          <button type="button" class="warning" data-src="27-harp-pentatonic-low.wav" data-label="27 竖琴五声三音 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">28</div>
+        <div class="copy">
+          <p class="name">卡林巴 · 五度</p>
+          <p class="description">C4→G4 拇指琴，柔和、有木质共鸣</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="28-kalimba-fifth-high.wav" data-label="28 卡林巴五度 · 高分">高分</button>
+          <button type="button" class="warning" data-src="28-kalimba-fifth-low.wav" data-label="28 卡林巴五度 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">29</div>
+        <div class="copy">
+          <p class="name">钢片琴 · 短音</p>
+          <p class="description">G4 单音短版，保留金属感但不拖尾</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="29-vibraphone-short-high.wav" data-label="29 钢片琴短音 · 高分">高分</button>
+          <button type="button" class="warning" data-src="29-vibraphone-short-low.wav" data-label="29 钢片琴短音 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">30</div>
+        <div class="copy">
+          <p class="name">柔和合成器 · 三音</p>
+          <p class="description">C-E-G 软起音三音，现代、干净</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="30-synth-arpeggio-high.wav" data-label="30 柔和合成器三音 · 高分">高分</button>
+          <button type="button" class="warning" data-src="30-synth-arpeggio-low.wav" data-label="30 柔和合成器三音 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">31</div>
+        <div class="copy">
+          <p class="name">服务铃<span class="badge">推荐</span></p>
+          <p class="description">短促的“叮”，高分双击、低分单击，很像完成提示</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="31-service-bell-high.wav" data-label="31 服务铃 · 高分">高分</button>
+          <button type="button" class="warning" data-src="31-service-bell-low.wav" data-label="31 服务铃 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">32</div>
+        <div class="copy">
+          <p class="name">木鱼</p>
+          <p class="description">低沉的“笃”，高分双击、低分单击，不占时间</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="32-wooden-fish-high.wav" data-label="32 木鱼 · 高分">高分</button>
+          <button type="button" class="warning" data-src="32-wooden-fish-low.wav" data-label="32 木鱼 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">33</div>
+        <div class="copy">
+          <p class="name">低音门铃</p>
+          <p class="description">A3→D4 的柔和门铃，低分向下</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="33-doorbell-high.wav" data-label="33 低音门铃 · 高分">高分</button>
+          <button type="button" class="warning" data-src="33-doorbell-low.wav" data-label="33 低音门铃 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">34</div>
+        <div class="copy">
+          <p class="name">轻木块</p>
+          <p class="description">比 10 号更轻、更低的木块敲击</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="34-soft-woodblock-high.wav" data-label="34 轻木块 · 高分">高分</button>
+          <button type="button" class="warning" data-src="34-soft-woodblock-low.wav" data-label="34 轻木块 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">35</div>
+        <div class="copy">
+          <p class="name">轻咔哒<span class="badge">推荐</span></p>
+          <p class="description">极短的双击轻响，没有音高，最不容易听腻</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="35-soft-click-high.wav" data-label="35 轻咔哒 · 高分">高分</button>
+          <button type="button" class="warning" data-src="35-soft-click-low.wav" data-label="35 轻咔哒 · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">36</div>
+        <div class="copy">
+          <p class="name">水滴木琴</p>
+          <p class="description">水滴加一个木琴音，轻巧有层次</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="36-water-marimba-high.wav" data-label="36 水滴木琴 · 高分">高分</button>
+          <button type="button" class="warning" data-src="36-water-marimba-low.wav" data-label="36 水滴木琴 · 低分">低分</button>
+        </div>
+      </article>
+
+      <h2 class="group-title" id="group-37">语音鼓励（37–42）</h2>
+
+      <article class="card">
+        <div class="number">37</div>
+        <div class="copy">
+          <p class="name">美音 · Perfect!</p>
+          <p class="description">“Perfect!” / “Keep going!”，语气自然</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="37-speech-us-high.wav" data-label="37 美音 Perfect · 高分">高分</button>
+          <button type="button" class="warning" data-src="37-speech-us-low.wav" data-label="37 美音 Perfect · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">38</div>
+        <div class="copy">
+          <p class="name">英音 · That's right!</p>
+          <p class="description">“That's right!” / “One more time.”</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="38-speech-uk-high.wav" data-label="38 英音 That's right · 高分">高分</button>
+          <button type="button" class="warning" data-src="38-speech-uk-low.wav" data-label="38 英音 That's right · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">39</div>
+        <div class="copy">
+          <p class="name">美音 · Nice!<span class="badge">推荐</span></p>
+          <p class="description">“Nice!” / “Almost!”，最短的一组语音</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="39-speech-us-high.wav" data-label="39 美音 Nice · 高分">高分</button>
+          <button type="button" class="warning" data-src="39-speech-us-low.wav" data-label="39 美音 Nice · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">40</div>
+        <div class="copy">
+          <p class="name">英音 · Excellent!</p>
+          <p class="description">“Excellent!” / “Not quite.”，英式语气</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="40-speech-uk-high.wav" data-label="40 英音 Excellent · 高分">高分</button>
+          <button type="button" class="warning" data-src="40-speech-uk-low.wav" data-label="40 英音 Excellent · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">41</div>
+        <div class="copy">
+          <p class="name">美音 · Good job!</p>
+          <p class="description">“Good job!” / “Again!”，更口语化</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="41-speech-us-high.wav" data-label="41 美音 Good job · 高分">高分</button>
+          <button type="button" class="warning" data-src="41-speech-us-low.wav" data-label="41 美音 Good job · 低分">低分</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="number">42</div>
+        <div class="copy">
+          <p class="name">英音 · Brilliant!</p>
+          <p class="description">“Brilliant!” / “Once more.”，英式鼓励</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="good" data-src="42-speech-uk-high.wav" data-label="42 英音 Brilliant · 高分">高分</button>
+          <button type="button" class="warning" data-src="42-speech-uk-low.wav" data-label="42 英音 Brilliant · 低分">低分</button>
         </div>
       </article>
     </section>
