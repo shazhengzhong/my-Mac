@@ -20,6 +20,7 @@
 - 正文不显示音标；点击单词从底部弹出半屏单词卡，卡内显示音标、中文词性/释义、单词发音/循环、单分数录音测评 + 录音回放、居中音节播放，支持向下滑关闭。
 - 旧的独立练习弹层、正文音标、中文释义朗读按钮、`view-mode` 切换均已移除。
 - 单词卡不显示“播放中/播放完毕”文字；底部状态区预留高度，避免上下闪跳。
+- 朗读中的当前词用蓝色高亮，已读过的词不变暗；句子 TTS 时间戳会先按词对齐，再回退到长度估算。
 - 图标预览页：`static/icon-options/index.html`。
 - PWA / 苹果主屏 / favicon / Android 图标都在 `static/icons/`，Android 壳图标在 `android-shell/res/mipmap-xxxhdpi/ic_launcher.png`。
 
@@ -33,7 +34,7 @@
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
 - 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
-- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`，通过 HTML audio 播放以兼容华为 WebView；Web Audio 只作后备。
+- 测评提示音文件在 `static/audio/assess-low.wav` / `assess-high.wav`，通过 HTML audio 播放以兼容华为 WebView；音量已调高，Web Audio 只作后备。
 - 单词发音个别词有 TTS 语调问题。`riverside` 已加 CMU SSML 发音覆盖；其他词如果仍不准，优先考虑换 Microsoft/Azure 音源，不要继续硬编码单个词。
 
 ### 运行与验证

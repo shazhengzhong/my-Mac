@@ -67,24 +67,79 @@
     });
   }
 
-  function buildTimings(words, rawTimings, durationMs) {
-    const usable =
-      Array.isArray(rawTimings) &&
-      rawTimings.length === words.length &&
-      rawTimings.every((item) => {
-        if (!item || typeof item !== "object") {
-          return false;
+  function normalizeWord(value) {
+    return (value || "")
+      .toLowerCase()
+      .replace(/[’]/g, "'")
+      .replace(/[^a-z0-9']/g, "");
+  }
+
+  function alignTimings(rawTimings, textSpans) {
+    if (
+      !Array.isArray(rawTimings) ||
+      rawTimings.length === 0 ||
+      textSpans.length === 0
+    ) {
+      return [];
+    }
+
+    const aligned = [];
+    let timingIndex = 0;
+    for (let spanIndex = 0; spanIndex < textSpans.length; spanIndex += 1) {
+      const target = normalizeWord(textSpans[spanIndex].textContent);
+      if (!target) {
+        const previous = aligned[aligned.length - 1];
+        const edge = previous ? previous.end_ms : 0;
+        aligned.push({ start_ms: edge, end_ms: edge });
+        continue;
+      }
+
+      let joined = "";
+      let start = null;
+      let end = null;
+      let consumed = 0;
+      while (timingIndex + consumed < rawTimings.length) {
+        const item = rawTimings[timingIndex + consumed];
+        const word = normalizeWord(item && item.word);
+        if (word) {
+          const itemStart = Number(item.start_ms);
+          const itemEnd = Number(item.end_ms);
+          if (Number.isFinite(itemStart) && Number.isFinite(itemEnd)) {
+            if (start === null) {
+              start = itemStart;
+            }
+            end = itemEnd;
+            joined += word;
+          }
         }
-        return (
-          Number.isFinite(Number(item.start_ms)) &&
-          Number.isFinite(Number(item.end_ms))
-        );
-      });
-    if (usable) {
-      return rawTimings.map((item) => ({
-        start_ms: Number(item.start_ms),
-        end_ms: Number(item.end_ms),
-      }));
+        consumed += 1;
+        if (joined === target) {
+          break;
+        }
+        if (!target.startsWith(joined)) {
+          break;
+        }
+      }
+
+      if (
+        start === null ||
+        end === null ||
+        !joined ||
+        (!joined.startsWith(target) && !target.startsWith(joined))
+      ) {
+        return [];
+      }
+      aligned.push({ start_ms: start, end_ms: end });
+      timingIndex += Math.max(1, consumed);
+    }
+
+    return aligned.length === textSpans.length ? aligned : [];
+  }
+
+  function buildTimings(words, rawTimings, durationMs) {
+    const aligned = alignTimings(rawTimings, words);
+    if (aligned.length === words.length) {
+      return aligned;
     }
 
     const weights = words.map((word) =>

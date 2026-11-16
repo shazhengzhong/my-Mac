@@ -77,7 +77,7 @@
       try {
         player.pause();
         player.currentTime = 0;
-        player.volume = 0.9;
+        player.volume = 1.0;
         const attempt = player.play();
         if (attempt && typeof attempt.catch === "function") {
           attempt.catch(() => playWebAudioTone(score));
