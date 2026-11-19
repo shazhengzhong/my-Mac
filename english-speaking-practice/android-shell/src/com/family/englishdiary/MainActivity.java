@@ -32,6 +32,8 @@ import java.util.List;
 
 public class MainActivity extends Activity {
     private static final String START_URL = "https://192.168.5.2:8443/";
+    private static final String PRIMARY_HOST = "192.168.5.2";
+    private static final String FALLBACK_HOST = "192.168.5.4";
     private static final int REQUEST_AUDIO = 1002;
     private static final int REQUEST_GALLERY = 1003;
     private static final int REQUEST_CAMERA = 1004;
@@ -84,7 +86,8 @@ public class MainActivity extends Activity {
                             WebView view, WebResourceRequest request) {
                         Uri uri = request.getUrl();
                         if ("https".equals(uri.getScheme())
-                                && "192.168.5.4".equals(uri.getHost())) {
+                                && (PRIMARY_HOST.equals(uri.getHost())
+                                        || FALLBACK_HOST.equals(uri.getHost()))) {
                             return false;
                         }
                         try {

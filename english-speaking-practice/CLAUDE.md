@@ -54,7 +54,7 @@ python manage.py test
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.2:8443/`（Mac 当前 IP；证书同时覆盖 .2 和 .4）
-- Android WebView 壳 APK：`static/family-diary-1.17.apk`（版本 1.17，versionCode 18；内置地址改为当前 Mac IP `https://192.168.5.2:8443/`；高分用 11 号美音 “Great!”，低分用 1 号木琴下行音）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`–`1.16` 仍保留。
+- Android WebView 壳 APK：`static/family-diary-1.18.apk`（版本 1.18，versionCode 19；内置地址 `https://192.168.5.2:8443/`；WebView 内允许 `.2` 和 `.4` 同主机跳转，其余链接才交给系统浏览器；高分用 11 号美音 “Great!”，低分用 1 号木琴下行音）。最新下载副本：`static/family-diary.apk`；旧版 `1.8`–`1.17` 仍保留。
 
 ### 文档提醒
 
