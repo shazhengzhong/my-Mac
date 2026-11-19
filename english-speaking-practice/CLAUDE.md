@@ -33,7 +33,7 @@
 - 普通单词发音优先走 Edge TTS；Fallback 到 CosyVoice 时，已知问题词 `riverside` 仍使用 CMU SSML 覆盖。
 - 单词测评：腾讯云 SOE；拍照 OCR：腾讯云 OCR；Key 只在 `.env`。
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
-- 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
+- 音节播放：单词卡内逐音节和整词拼读，也优先使用 Edge TTS，Edge 失败时回退 CosyVoice。音节边界仍来自 `pyphen`（排版断词，不是音标音节），且每个音节单独合成会被读成重读；Edge 只改善音色/清晰度，不解决切分和句子内弱读。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
 - 测评提示音采用组合方案：高分（≥70）用试听页 **11 号美音语音 “Great!”**；低分（<70）用试听页 **1 号木琴的低分音**（G4→C4 下行）。`static/audio/assess-high.wav` / `assess-low.wav` 分别是这两段音频。浏览器只播放一份 HTML audio；Web Audio 只作后备。
 - Android 壳 1.16 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `MediaPlayer` 播放 APK 内置的 `assets/assess_high.wav` / `assets/assess_low.wav`，走 `USAGE_ALARM` / `STREAM_ALARM` 音轨；壳内只播放原生音频，不叠加网页提示音。闹钟音量为 0 时回退到网页 WAV。
