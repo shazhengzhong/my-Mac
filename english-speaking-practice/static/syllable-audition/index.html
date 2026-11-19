@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>音节切分试听 · 英语口语练习</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#e4e7ec;--blue:#2563eb;--blue-soft:#eff6ff;--green:#15803d;--green-soft:#dcfce7;--coral:#be123c;--coral-soft:#fff1f2}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--ink);background:radial-gradient(circle at 8% 0%,#eff6ff 0,transparent 34%),radial-gradient(circle at 100% 15%,#fff1f2 0,transparent 30%),#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+main{width:min(100%,900px);margin:0 auto;padding:26px 14px calc(36px + env(safe-area-inset-bottom))}
+.eyebrow{margin:0 0 6px;color:var(--blue);font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}h1{margin:0;font-size:clamp(1.4rem,5vw,2rem)}.lead{margin:10px 0 0;color:var(--muted);font-size:.9rem;line-height:1.65}.notice{margin:14px 0 18px;padding:11px 13px;border:1px solid #dbeafe;border-radius:14px;background:var(--blue-soft);color:#1e40af;font-size:.84rem;line-height:1.6}.grid{display:grid;gap:13px}.card{padding:14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.96);box-shadow:0 8px 24px rgba(15,23,42,.045)}.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.head h2{margin:0;font-size:1.3rem;letter-spacing:-.02em}.tag{color:#15803d;background:var(--green-soft);padding:3px 7px;border-radius:999px;font-size:.68rem;font-weight:800}.split{margin:7px 0 0;color:var(--muted);font-size:.84rem;line-height:1.5}.split span{color:#475569;font-weight:700}.split.cmu{color:var(--green);font-weight:700}.sylrow{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 10px}.syl{padding:7px 10px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:#15803d;font-weight:800}.actions{display:flex;flex-wrap:wrap;gap:7px}.actions button{padding:8px 10px;border-radius:10px;border:1px solid transparent;font-weight:800;font-size:.76rem}.cur{background:#f1f5f9;color:#334155}.cmubtn{background:var(--green-soft);color:var(--green)}.wordbtn{background:var(--blue-soft);color:var(--blue)}button{font:inherit;cursor:pointer}button:active{transform:scale(.97)}.is-playing{color:#fff!important}.cur.is-playing{background:#475569}.cmubtn.is-playing{background:#16a34a}.wordbtn.is-playing{background:#2563eb}.status{position:sticky;bottom:12px;margin-top:16px;padding:11px 13px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.96);box-shadow:0 8px 24px rgba(15,23,42,.08);color:var(--muted);font-size:.82rem;backdrop-filter:blur(10px)}.status strong{color:var(--ink)}.stop{margin-left:8px;padding:5px 9px;border-color:var(--line);background:#fff;color:var(--muted);min-height:auto;border-radius:999px;font-size:.72rem}
+</style></head><body><main><header><p class="eyebrow">英语口语练习 · 音节诊断</p><h1>CMU / 音标音节试听</h1><p class="lead">对比当前 pyphen 切分和 CMU 音标音节。重点听音标音节的切分、弱读和重音是否比当前自然。</p></header><p class="notice">音标音节音频用 CosyVoice 的 CMU SSML 生成，因为 Edge 的普通文本接口不能可靠读 IPA。音色可能和整词 Edge 不同；先判断切分和发音是否正确，再决定正式方案。</p><section class="grid"><article class="card">
+  <div class="head"><h2>banana</h2><span class="tag">CMU 3 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>ba · nana</p>
+  <p class="split cmu"><span>音标音节：</span>bə · ˈnæn · ə</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="banana-cmu-0.wav" data-label="banana · bə">bə</button><button type="button" class="syl" data-src="banana-cmu-1.wav" data-label="banana · ˈnæn">ˈnæn</button><button type="button" class="syl" data-src="banana-cmu-2.wav" data-label="banana · ə">ə</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="banana-current.wav" data-label="banana · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="banana-cmu-seq.wav" data-label="banana · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="banana-word.wav" data-label="banana · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>vegetable</h2><span class="tag">CMU 3 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>veg · etable</p>
+  <p class="split cmu"><span>音标音节：</span>ˈvɛdʒ · tə · bəl</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="vegetable-cmu-0.wav" data-label="vegetable · ˈvɛdʒ">ˈvɛdʒ</button><button type="button" class="syl" data-src="vegetable-cmu-1.wav" data-label="vegetable · tə">tə</button><button type="button" class="syl" data-src="vegetable-cmu-2.wav" data-label="vegetable · bəl">bəl</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="vegetable-current.wav" data-label="vegetable · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="vegetable-cmu-seq.wav" data-label="vegetable · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="vegetable-word.wav" data-label="vegetable · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>chocolate</h2><span class="tag">CMU 2 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>choco · late</p>
+  <p class="split cmu"><span>音标音节：</span>ˈtʃɔk · lət</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="chocolate-cmu-0.wav" data-label="chocolate · ˈtʃɔk">ˈtʃɔk</button><button type="button" class="syl" data-src="chocolate-cmu-1.wav" data-label="chocolate · lət">lət</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="chocolate-current.wav" data-label="chocolate · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="chocolate-cmu-seq.wav" data-label="chocolate · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="chocolate-word.wav" data-label="chocolate · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>comfortable</h2><span class="tag">CMU 4 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>com · fort · able</p>
+  <p class="split cmu"><span>音标音节：</span>ˈkʌm · fər · tə · bəl</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="comfortable-cmu-0.wav" data-label="comfortable · ˈkʌm">ˈkʌm</button><button type="button" class="syl" data-src="comfortable-cmu-1.wav" data-label="comfortable · fər">fər</button><button type="button" class="syl" data-src="comfortable-cmu-2.wav" data-label="comfortable · tə">tə</button><button type="button" class="syl" data-src="comfortable-cmu-3.wav" data-label="comfortable · bəl">bəl</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="comfortable-current.wav" data-label="comfortable · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="comfortable-cmu-seq.wav" data-label="comfortable · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="comfortable-word.wav" data-label="comfortable · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>interesting</h2><span class="tag">CMU 3 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>in · ter · est · ing</p>
+  <p class="split cmu"><span>音标音节：</span>ˈɪn · trə · stɪŋ</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="interesting-cmu-0.wav" data-label="interesting · ˈɪn">ˈɪn</button><button type="button" class="syl" data-src="interesting-cmu-1.wav" data-label="interesting · trə">trə</button><button type="button" class="syl" data-src="interesting-cmu-2.wav" data-label="interesting · stɪŋ">stɪŋ</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="interesting-current.wav" data-label="interesting · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="interesting-cmu-seq.wav" data-label="interesting · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="interesting-word.wav" data-label="interesting · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>tabby</h2><span class="tag">CMU 2 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>tab · by</p>
+  <p class="split cmu"><span>音标音节：</span>ˈtæb · i</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="tabby-cmu-0.wav" data-label="tabby · ˈtæb">ˈtæb</button><button type="button" class="syl" data-src="tabby-cmu-1.wav" data-label="tabby · i">i</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="tabby-current.wav" data-label="tabby · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="tabby-cmu-seq.wav" data-label="tabby · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="tabby-word.wav" data-label="tabby · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>curly</h2><span class="tag">CMU 2 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>curly</p>
+  <p class="split cmu"><span>音标音节：</span>ˈkɜr · li</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="curly-cmu-0.wav" data-label="curly · ˈkɜr">ˈkɜr</button><button type="button" class="syl" data-src="curly-cmu-1.wav" data-label="curly · li">li</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="curly-current.wav" data-label="curly · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="curly-cmu-seq.wav" data-label="curly · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="curly-word.wav" data-label="curly · 整词">整词</button>
+  </div>
+</article><article class="card">
+  <div class="head"><h2>photographer</h2><span class="tag">CMU 4 音节</span></div>
+  <p class="split"><span>当前 pyphen：</span>pho · tog · ra · pher</p>
+  <p class="split cmu"><span>音标音节：</span>fə · ˈtɑ · grə · fər</p>
+  <div class="sylrow"><button type="button" class="syl" data-src="photographer-cmu-0.wav" data-label="photographer · fə">fə</button><button type="button" class="syl" data-src="photographer-cmu-1.wav" data-label="photographer · ˈtɑ">ˈtɑ</button><button type="button" class="syl" data-src="photographer-cmu-2.wav" data-label="photographer · grə">grə</button><button type="button" class="syl" data-src="photographer-cmu-3.wav" data-label="photographer · fər">fər</button></div>
+  <div class="actions">
+    <button type="button" class="cur" data-src="photographer-current.wav" data-label="photographer · 当前 pyphen 序列">当前序列</button>
+    <button type="button" class="cmubtn" data-src="photographer-cmu-seq.wav" data-label="photographer · CMU 音节序列">音标音节序列</button>
+    <button type="button" class="wordbtn" data-src="photographer-word.wav" data-label="photographer · 整词">整词</button>
+  </div>
+</article></section><p class="status" role="status" aria-live="polite"><span id="status-text">还没有播放。点按钮试听。</span><button type="button" class="stop" id="stop-button">停止</button></p></main>
+<script>
+(()=>{"use strict";const statusText=document.getElementById("status-text"),stopButton=document.getElementById("stop-button");let current=null;const players=new Map();function clear(){document.querySelectorAll("button.is-playing").forEach(b=>b.classList.remove("is-playing"))}function stop(){if(current){current.pause();current.currentTime=0}current=null;clear();statusText.textContent="已停止。"}function play(button,src,label){if(current){current.pause();current.currentTime=0}clear();let a=players.get(src);if(!a){a=new Audio(src);a.preload="auto";a.volume=1;players.set(src,a)}current=a;a.currentTime=0;a.onended=()=>{if(current===a){current=null;clear()}};button.classList.add("is-playing");statusText.textContent="正在播放："+label;a.play().catch(()=>{clear();statusText.textContent="播放失败，请再点一次或刷新页面。"})}document.querySelectorAll("button[data-src]").forEach(b=>b.addEventListener("click",()=>play(b,b.dataset.src,b.dataset.label||b.dataset.src)));stopButton.addEventListener("click",stop);window.addEventListener("pagehide",stop)})();
+</script></body></html>

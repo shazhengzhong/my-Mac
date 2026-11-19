@@ -1,0 +1,387 @@
+{
+  "banana": {
+    "current": [
+      "ba",
+      "nana"
+    ],
+    "current_file": "banana-current.wav",
+    "current_duration": 3.62,
+    "cmu": [
+      {
+        "ipa": "bə",
+        "phones": "B AH0",
+        "stressed": false
+      },
+      {
+        "ipa": "ˈnæn",
+        "phones": "N AE1 N",
+        "stressed": true
+      },
+      {
+        "ipa": "ə",
+        "phones": "AH0",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "banana-cmu-seq.wav",
+    "cmu_duration": 2.98,
+    "word_file": "banana-word.wav",
+    "word_duration": 0.61,
+    "individual": [
+      {
+        "ipa": "bə",
+        "phones": "B AH0",
+        "file": "banana-cmu-0.wav",
+        "duration": 0.37
+      },
+      {
+        "ipa": "ˈnæn",
+        "phones": "N AE1 N",
+        "file": "banana-cmu-1.wav",
+        "duration": 0.47
+      },
+      {
+        "ipa": "ə",
+        "phones": "AH0",
+        "file": "banana-cmu-2.wav",
+        "duration": 0.3
+      }
+    ]
+  },
+  "vegetable": {
+    "current": [
+      "veg",
+      "etable"
+    ],
+    "current_file": "vegetable-current.wav",
+    "current_duration": 3.76,
+    "cmu": [
+      {
+        "ipa": "ˈvɛdʒ",
+        "phones": "V EH1 JH",
+        "stressed": true
+      },
+      {
+        "ipa": "tə",
+        "phones": "T AH0",
+        "stressed": false
+      },
+      {
+        "ipa": "bəl",
+        "phones": "B AH0 L",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "vegetable-cmu-seq.wav",
+    "cmu_duration": 2.95,
+    "word_file": "vegetable-word.wav",
+    "word_duration": 0.76,
+    "individual": [
+      {
+        "ipa": "ˈvɛdʒ",
+        "phones": "V EH1 JH",
+        "file": "vegetable-cmu-0.wav",
+        "duration": 0.6
+      },
+      {
+        "ipa": "tə",
+        "phones": "T AH0",
+        "file": "vegetable-cmu-1.wav",
+        "duration": 0.44
+      },
+      {
+        "ipa": "bəl",
+        "phones": "B AH0 L",
+        "file": "vegetable-cmu-2.wav",
+        "duration": 0.39
+      }
+    ]
+  },
+  "chocolate": {
+    "current": [
+      "choco",
+      "late"
+    ],
+    "current_file": "chocolate-current.wav",
+    "current_duration": 3.67,
+    "cmu": [
+      {
+        "ipa": "ˈtʃɔk",
+        "phones": "CH AO1 K",
+        "stressed": true
+      },
+      {
+        "ipa": "lət",
+        "phones": "L AH0 T",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "chocolate-cmu-seq.wav",
+    "cmu_duration": 1.95,
+    "word_file": "chocolate-word.wav",
+    "word_duration": 0.66,
+    "individual": [
+      {
+        "ipa": "ˈtʃɔk",
+        "phones": "CH AO1 K",
+        "file": "chocolate-cmu-0.wav",
+        "duration": 0.46
+      },
+      {
+        "ipa": "lət",
+        "phones": "L AH0 T",
+        "file": "chocolate-cmu-1.wav",
+        "duration": 0.46
+      }
+    ]
+  },
+  "comfortable": {
+    "current": [
+      "com",
+      "fort",
+      "able"
+    ],
+    "current_file": "comfortable-current.wav",
+    "current_duration": 4.02,
+    "cmu": [
+      {
+        "ipa": "ˈkʌm",
+        "phones": "K AH1 M",
+        "stressed": true
+      },
+      {
+        "ipa": "fər",
+        "phones": "F ER0",
+        "stressed": false
+      },
+      {
+        "ipa": "tə",
+        "phones": "T AH0",
+        "stressed": false
+      },
+      {
+        "ipa": "bəl",
+        "phones": "B AH0 L",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "comfortable-cmu-seq.wav",
+    "cmu_duration": 4.23,
+    "word_file": "comfortable-word.wav",
+    "word_duration": 0.74,
+    "individual": [
+      {
+        "ipa": "ˈkʌm",
+        "phones": "K AH1 M",
+        "file": "comfortable-cmu-0.wav",
+        "duration": 0.46
+      },
+      {
+        "ipa": "fər",
+        "phones": "F ER0",
+        "file": "comfortable-cmu-1.wav",
+        "duration": 0.44
+      },
+      {
+        "ipa": "tə",
+        "phones": "T AH0",
+        "file": "comfortable-cmu-2.wav",
+        "duration": 0.44
+      },
+      {
+        "ipa": "bəl",
+        "phones": "B AH0 L",
+        "file": "comfortable-cmu-3.wav",
+        "duration": 0.39
+      }
+    ]
+  },
+  "interesting": {
+    "current": [
+      "in",
+      "ter",
+      "est",
+      "ing"
+    ],
+    "current_file": "interesting-current.wav",
+    "current_duration": 4.56,
+    "cmu": [
+      {
+        "ipa": "ˈɪn",
+        "phones": "IH1 N",
+        "stressed": true
+      },
+      {
+        "ipa": "trə",
+        "phones": "T R AH0",
+        "stressed": false
+      },
+      {
+        "ipa": "stɪŋ",
+        "phones": "S T IH0 NG",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "interesting-cmu-seq.wav",
+    "cmu_duration": 2.85,
+    "word_file": "interesting-word.wav",
+    "word_duration": 0.85,
+    "individual": [
+      {
+        "ipa": "ˈɪn",
+        "phones": "IH1 N",
+        "file": "interesting-cmu-0.wav",
+        "duration": 0.35
+      },
+      {
+        "ipa": "trə",
+        "phones": "T R AH0",
+        "file": "interesting-cmu-1.wav",
+        "duration": 0.48
+      },
+      {
+        "ipa": "stɪŋ",
+        "phones": "S T IH0 NG",
+        "file": "interesting-cmu-2.wav",
+        "duration": 0.59
+      }
+    ]
+  },
+  "tabby": {
+    "current": [
+      "tab",
+      "by"
+    ],
+    "current_file": "tabby-current.wav",
+    "current_duration": 3.36,
+    "cmu": [
+      {
+        "ipa": "ˈtæb",
+        "phones": "T AE1 B",
+        "stressed": true
+      },
+      {
+        "ipa": "i",
+        "phones": "IY0",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "tabby-cmu-seq.wav",
+    "cmu_duration": 1.71,
+    "word_file": "tabby-word.wav",
+    "word_duration": 0.54,
+    "individual": [
+      {
+        "ipa": "ˈtæb",
+        "phones": "T AE1 B",
+        "file": "tabby-cmu-0.wav",
+        "duration": 0.49
+      },
+      {
+        "ipa": "i",
+        "phones": "IY0",
+        "file": "tabby-cmu-1.wav",
+        "duration": 0.35
+      }
+    ]
+  },
+  "curly": {
+    "current": [
+      "curly"
+    ],
+    "current_file": "curly-current.wav",
+    "current_duration": 0.5,
+    "cmu": [
+      {
+        "ipa": "ˈkɜr",
+        "phones": "K ER1",
+        "stressed": true
+      },
+      {
+        "ipa": "li",
+        "phones": "L IY0",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "curly-cmu-seq.wav",
+    "cmu_duration": 1.86,
+    "word_file": "curly-word.wav",
+    "word_duration": 0.5,
+    "individual": [
+      {
+        "ipa": "ˈkɜr",
+        "phones": "K ER1",
+        "file": "curly-cmu-0.wav",
+        "duration": 0.5
+      },
+      {
+        "ipa": "li",
+        "phones": "L IY0",
+        "file": "curly-cmu-1.wav",
+        "duration": 0.37
+      }
+    ]
+  },
+  "photographer": {
+    "current": [
+      "pho",
+      "tog",
+      "ra",
+      "pher"
+    ],
+    "current_file": "photographer-current.wav",
+    "current_duration": 5.5,
+    "cmu": [
+      {
+        "ipa": "fə",
+        "phones": "F AH0",
+        "stressed": false
+      },
+      {
+        "ipa": "ˈtɑ",
+        "phones": "T AA1",
+        "stressed": true
+      },
+      {
+        "ipa": "grə",
+        "phones": "G R AH0",
+        "stressed": false
+      },
+      {
+        "ipa": "fər",
+        "phones": "F ER0",
+        "stressed": false
+      }
+    ],
+    "cmu_file": "photographer-cmu-seq.wav",
+    "cmu_duration": 4.23,
+    "word_file": "photographer-word.wav",
+    "word_duration": 0.89,
+    "individual": [
+      {
+        "ipa": "fə",
+        "phones": "F AH0",
+        "file": "photographer-cmu-0.wav",
+        "duration": 0.28
+      },
+      {
+        "ipa": "ˈtɑ",
+        "phones": "T AA1",
+        "file": "photographer-cmu-1.wav",
+        "duration": 0.44
+      },
+      {
+        "ipa": "grə",
+        "phones": "G R AH0",
+        "file": "photographer-cmu-2.wav",
+        "duration": 0.43
+      },
+      {
+        "ipa": "fər",
+        "phones": "F ER0",
+        "file": "photographer-cmu-3.wav",
+        "duration": 0.44
+      }
+    ]
+  }
+}
