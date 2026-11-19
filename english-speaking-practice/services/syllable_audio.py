@@ -31,6 +31,46 @@ MIN_CLIP_MS = 80
 SYLLABLE_PAUSE_MS = 300
 FULL_WORD_PAUSE_MS = 500
 
+# ARPAbet vowels (without stress digits) and the labels Tencent SOE uses for
+# English phone timings.  Keeping these separate makes the fallback below
+# readable and avoids treating consonants as syllable nuclei.
+CMU_VOWELS = {
+    "AA",
+    "AE",
+    "AH",
+    "AO",
+    "AW",
+    "AY",
+    "EH",
+    "ER",
+    "EY",
+    "IH",
+    "IY",
+    "OW",
+    "OY",
+    "UH",
+    "UW",
+}
+SOE_VOWELS = {
+    "aa",
+    "ae",
+    "ah",
+    "ao",
+    "aw",
+    "ay",
+    "ax",
+    "eh",
+    "er",
+    "ey",
+    "ih",
+    "ix",
+    "iy",
+    "ow",
+    "oy",
+    "uh",
+    "uw",
+}
+
 
 class SyllableAudioError(Exception):
     """A user-safe failure while slicing a word into syllables."""
@@ -136,8 +176,8 @@ def _slice_pcm(
     return samples.tobytes()
 
 
-def _phone_spans(word: str, audio: bytes) -> list[tuple[int, int]]:
-    """Return Tencent SOE phone start/end times, in milliseconds."""
+def _phone_spans(word: str, audio: bytes) -> list[tuple[str, int, int]]:
+    """Return Tencent SOE (phone, start, end) timings in milliseconds."""
     wav_bytes = pcm_to_wav(
         _decode_pcm(audio, ALIGNMENT_RATE),
         rate=ALIGNMENT_RATE,
@@ -156,17 +196,77 @@ def _phone_spans(word: str, audio: bytes) -> list[tuple[int, int]]:
     if not phones:
         raise SyllableAudioError("评测服务没有返回音素时间轴。")
 
-    spans: list[tuple[int, int]] = []
+    spans: list[tuple[str, int, int]] = []
     for phone in phones:
         try:
+            label = str(phone.get("Phone") or "").strip().lower()
             start = int(phone["MemBeginTime"])
             end = int(phone["MemEndTime"])
         except (KeyError, TypeError, ValueError) as exc:
             raise SyllableAudioError("评测服务返回的音素时间轴无效。") from exc
         if end <= start:
             raise SyllableAudioError("评测服务返回的音素时间轴无效。")
-        spans.append((start, end))
+        spans.append((label, start, end))
     return spans
+
+
+def _syllable_ranges(syllables, spans) -> list[tuple[int, int]]:
+    """Return one (start, end) range per CMU syllable.
+
+    The direct path groups the observed phones by the number of CMU phones in
+    each syllable.  If SOE merges or splits a phone (common in reduced
+    syllables such as "actually"), fall back to vowel nuclei: every English
+    syllable has one, and the CMU coda count tells us how many observed phones
+    after that nucleus belong to the syllable.
+    """
+    expected_counts = [len(item.phones.split()) for item in syllables]
+    if sum(expected_counts) == len(spans):
+        ranges = []
+        cursor = 0
+        for count in expected_counts:
+            group = spans[cursor : cursor + count]
+            cursor += count
+            ranges.append((group[0][1], group[-1][2]))
+        return ranges
+
+    vowel_indexes: list[int] = []
+    coda_counts: list[int] = []
+    for syllable in syllables:
+        phones = [phone.rstrip("012") for phone in syllable.phones.split()]
+        candidates = [
+            index
+            for index, phone in enumerate(phones)
+            if phone in CMU_VOWELS
+        ]
+        if not candidates:
+            raise SyllableAudioError("音标音节缺少元音。")
+        vowel_index = candidates[0]
+        vowel_indexes.append(vowel_index)
+        coda_counts.append(len(phones) - vowel_index - 1)
+
+    observed_vowels = [
+        index
+        for index, (label, _start, _end) in enumerate(spans)
+        if label in SOE_VOWELS
+    ]
+    if len(observed_vowels) != len(syllables):
+        raise SyllableAudioError("音素时间轴与音标音节数量不一致。")
+
+    ranges = []
+    start = spans[0][1]
+    for position, syllable in enumerate(syllables):
+        observed = observed_vowels[position]
+        coda = coda_counts[position]
+        end_index = min(observed + coda, len(spans) - 1)
+        # Do not cut into the next syllable's vowel.
+        if position + 1 < len(observed_vowels):
+            end_index = min(end_index, observed_vowels[position + 1] - 1)
+        end = spans[end_index][2]
+        if end <= start:
+            raise SyllableAudioError("音节时间范围无效。")
+        ranges.append((start, end))
+        start = end
+    return ranges
 
 
 def slice_word_audio(word: str, accent: str, audio: bytes) -> SlicedWord:
@@ -181,22 +281,15 @@ def slice_word_audio(word: str, accent: str, audio: bytes) -> SlicedWord:
     if not syllables:
         raise SyllableAudioError("这个单词没有可用的音标音节。")
 
-    expected_counts = [len(item.phones.split()) for item in syllables]
     spans = _phone_spans(phonics.normalized_word or word, audio)
-    if sum(expected_counts) != len(spans):
-        raise SyllableAudioError("音素时间轴与音标音节数量不一致。")
+    ranges = _syllable_ranges(syllables, spans)
 
     full_word_pcm = _decode_pcm(audio, PLAYBACK_RATE)
     full_duration = _duration_ms(full_word_pcm)
     clips: list[SyllableClip] = []
-    cursor = 0
-    for index, (syllable, count) in enumerate(
-        zip(syllables, expected_counts, strict=True)
+    for index, (syllable, (start, end)) in enumerate(
+        zip(syllables, ranges, strict=True)
     ):
-        group = spans[cursor : cursor + count]
-        cursor += count
-        start = group[0][0]
-        end = group[-1][1]
         if end - start < MIN_CLIP_MS:
             deficit = MIN_CLIP_MS - (end - start)
             start = max(0, start - deficit)

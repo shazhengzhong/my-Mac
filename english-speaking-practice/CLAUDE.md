@@ -48,7 +48,7 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-- 目前测试数：231 个，全部通过。
+- 目前测试数：232 个，全部通过。
 - 音节切分依赖系统 `ffmpeg`（当前已安装在 `/opt/homebrew/bin/ffmpeg`）；缺失时自动回退 CMU SSML。
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`

@@ -3523,17 +3523,18 @@ class SyllableSliceServiceTests(TestCase):
         return buffer.getvalue()
 
     @staticmethod
-    def _assessment(*spans):
+    def _assessment(*spans, labels=None):
         return SimpleNamespace(
             detail={
                 "words": [
                     {
                         "PhoneInfos": [
                             {
+                                "Phone": labels[index] if labels else "",
                                 "MemBeginTime": start,
                                 "MemEndTime": end,
                             }
-                            for start, end in spans
+                            for index, (start, end) in enumerate(spans)
                         ]
                     }
                 ]
@@ -3582,6 +3583,42 @@ class SyllableSliceServiceTests(TestCase):
             )
             with self.assertRaises(SyllableAudioError):
                 slice_word_audio("banana", "us", self._silent_wav())
+
+    def test_reduced_phone_count_uses_vowel_nuclei(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is required for syllable slicing")
+        # SOE returns 8 phones for "actually", while the CMU breakdown has 7.
+        spans = (
+            (150, 320),
+            (320, 380),
+            (380, 490),
+            (490, 510),
+            (510, 530),
+            (530, 550),
+            (550, 610),
+            (610, 850),
+        )
+        labels = ("ae", "k", "ch", "ah", "w", "ah", "l", "iy")
+        with patch("services.syllable_audio.get_assessor") as assessor_factory:
+            assessor_factory.return_value.assess.return_value = self._assessment(
+                *spans,
+                labels=labels,
+            )
+            sliced = slice_word_audio(
+                "actually",
+                "us",
+                self._silent_wav(),
+            )
+
+        self.assertEqual(len(sliced.clips), 4)
+        self.assertEqual(
+            [clip.ipa for clip in sliced.clips],
+            ["ˈæk", "ˌtʃu", "ə", "li"],
+        )
+        self.assertEqual(
+            len({clip.duration_ms for clip in sliced.clips}),
+            4,
+        )
 
 
 class SyllableAudioTests(AudioTestBase):

@@ -949,7 +949,15 @@ def word_card(request, token_id):
     )
 
 
-def _word_source_render(request, *, word, accent, sentence=None, lookup=None):
+def _word_source_render(
+    request,
+    *,
+    word,
+    accent,
+    sentence=None,
+    lookup=None,
+    source_text=None,
+):
     """Return the Edge whole-word render used as the syllable source.
 
     This deliberately uses the same cache key as the normal word button, so
@@ -972,6 +980,7 @@ def _word_source_render(request, *, word, accent, sentence=None, lookup=None):
     except TTSError:
         return None
 
+    text = source_text or word
     cache_key = tts_cache_key(
         provider=provider.provider,
         model=provider.model,
@@ -979,7 +988,7 @@ def _word_source_render(request, *, word, accent, sentence=None, lookup=None):
         style="natural",
         speed="word",
         rate=provider.speech_rate("word"),
-        text=word,
+        text=text,
         context="edge:v1",
     )
     existing = (
@@ -995,7 +1004,7 @@ def _word_source_render(request, *, word, accent, sentence=None, lookup=None):
 
     try:
         consume_tts_quota(request.user, len(word))
-        result = provider.synthesize(word, speed="word", style="natural")
+        result = provider.synthesize(text, speed="word", style="natural")
         return create_word_tts_render(
             owner=request.user,
             sentence=sentence,
@@ -1052,6 +1061,7 @@ def _ensure_syllable_slices(
         accent=accent,
         sentence=sentence,
         lookup=lookup,
+        source_text=lookup.word if lookup is not None else word,
     )
     if source is None:
         return None
