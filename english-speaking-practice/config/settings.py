@@ -224,6 +224,17 @@ TRANSLATION_DAILY_REQUEST_LIMIT = env_int("TRANSLATION_DAILY_REQUEST_LIMIT", 20)
 WORD_LOOKUP_DAILY_REQUEST_LIMIT = env_int("WORD_LOOKUP_DAILY_REQUEST_LIMIT", 100)
 TTS_DAILY_CHAR_LIMIT = env_int("TTS_DAILY_CHAR_LIMIT", 5000)
 
+# Word-only pronunciation uses Microsoft Edge TTS first, then the regular
+# sentence TTS provider as a fallback. Sentence/full-diary audio is unchanged.
+WORD_TTS_PROVIDER = os.getenv("WORD_TTS_PROVIDER", "edge").strip().lower()
+WORD_TTS_EDGE_VOICE_US = os.getenv(
+    "WORD_TTS_EDGE_VOICE_US", "en-US-AriaNeural"
+).strip()
+WORD_TTS_EDGE_VOICE_UK = os.getenv(
+    "WORD_TTS_EDGE_VOICE_UK", "en-GB-SoniaNeural"
+).strip()
+WORD_TTS_EDGE_TIMEOUT = env_int("WORD_TTS_EDGE_TIMEOUT", 30)
+
 # Word-level pronunciation assessment. Mock by default; Tencent SOE when configured.
 ASSESSMENT_PROVIDER = os.getenv("ASSESSMENT_PROVIDER", "mock").strip().lower()
 ASSESSMENT_DAILY_REQUEST_LIMIT = env_int("ASSESSMENT_DAILY_REQUEST_LIMIT", 100)

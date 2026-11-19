@@ -38,6 +38,7 @@ class OfflineProvidersTestRunner(DiscoverRunner):
             TENCENT_OCR_VERSION="2018-11-19",
             TENCENT_OCR_TIMEOUT=30,
             OCR_DAILY_REQUEST_LIMIT=10,
+            WORD_TTS_PROVIDER="disabled",
         )
         self._offline_override.enable()
         super().setup_test_environment(**kwargs)

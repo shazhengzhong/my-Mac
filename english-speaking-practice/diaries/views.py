@@ -17,6 +17,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST, require_http_methods
 
 from services.assessment import AssessmentError, get_assessor
+from services.edge_tts import EdgeTTSProvider
 from services.audio import (
     MAX_AUDIO_BYTES,
     AudioValidationError,
@@ -1020,87 +1021,186 @@ def word_syllable_audio(request, token_id, index):
     )
 
 
+def _word_tts_candidates(accent: str):
+    candidates = []
+    if settings.WORD_TTS_PROVIDER == "edge":
+        voice = (
+            settings.WORD_TTS_EDGE_VOICE_UK
+            if accent == "uk"
+            else settings.WORD_TTS_EDGE_VOICE_US
+        )
+        try:
+            candidates.append(
+                EdgeTTSProvider(
+                    voice=voice,
+                    timeout=settings.WORD_TTS_EDGE_TIMEOUT,
+                )
+            )
+        except TTSError:
+            # The configured fallback provider can still serve the word.
+            pass
+    last_error = None
+    try:
+        candidates.append(get_tts_provider(accent))
+    except TTSError as exc:
+        last_error = exc
+    return candidates, last_error
+
+
+def _word_tts_payload(
+    request,
+    *,
+    text: str,
+    word: str,
+    accent: str,
+    sentence=None,
+    lookup=None,
+):
+    """Try Edge TTS for a word, then fall back to the regular TTS provider."""
+    candidates, last_error = _word_tts_candidates(accent)
+    if not candidates:
+        return (
+            {"ok": False, "error": str(last_error or "语音服务尚未配置。")},
+            503,
+        )
+
+    quota_consumed = False
+    for provider in candidates:
+        is_edge = provider.provider == "edge_tts"
+        if is_edge:
+            ssml_text = ""
+            use_ssml = False
+            style = "natural"
+            speed = "word"
+            context = "edge:v1"
+        else:
+            ssml_text = word_tts_ssml(text)
+            use_ssml = bool(ssml_text) and hasattr(provider, "synthesize_ssml")
+            style = "word_ssml" if use_ssml else "natural"
+            speed = "word"
+            context = word_tts_context(text)
+            if use_ssml:
+                context = f"{context}|ssml:v1"
+
+        cache_key = tts_cache_key(
+            provider=provider.provider,
+            model=provider.model,
+            voice=provider.voice,
+            style=style,
+            speed=speed,
+            rate=provider.speech_rate(speed),
+            text=text,
+            context=context,
+        )
+        existing = (
+            WordTtsRender.objects.filter(
+                owner=request.user,
+                cache_key=cache_key,
+            )
+            .select_related("audio")
+            .first()
+        )
+        if existing is not None:
+            return (
+                {
+                    "ok": True,
+                    "audio_url": reverse(
+                        "serve_audio_asset",
+                        args=[existing.audio_id],
+                    ),
+                    "cached": True,
+                    "duration_ms": existing.audio.duration_ms,
+                },
+                None,
+            )
+
+        if not quota_consumed:
+            try:
+                consume_tts_quota(request.user, len(text))
+            except TTSQuotaExceeded as exc:
+                return {"ok": False, "error": str(exc)}, 429
+            quota_consumed = True
+
+        try:
+            if is_edge:
+                result = provider.synthesize(
+                    text,
+                    speed=speed,
+                    style=style,
+                )
+            elif use_ssml:
+                result = provider.synthesize_ssml(
+                    ssml_text,
+                    speed=speed,
+                    style=style,
+                )
+            else:
+                result = provider.synthesize(
+                    text,
+                    speed=speed,
+                    style=style,
+                    context_text=context,
+                )
+            render = create_word_tts_render(
+                owner=request.user,
+                sentence=sentence,
+                lookup=lookup,
+                word=word,
+                result=result,
+                cache_key=cache_key,
+            )
+        except TTSQuotaExceeded as exc:
+            return {"ok": False, "error": str(exc)}, 429
+        except TTSError as exc:
+            last_error = exc
+            logger.warning(
+                "Word TTS provider %s failed for %r: %s",
+                provider.provider,
+                word,
+                exc,
+            )
+            continue
+        except Exception:
+            last_error = TTSError("单词发音生成失败，请稍后再试。")
+            logger.exception(
+                "Word TTS provider %s failed unexpectedly for %r",
+                provider.provider,
+                word,
+            )
+            continue
+
+        return (
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset",
+                    args=[render.audio_id],
+                ),
+                "cached": False,
+                "duration_ms": result.duration_ms,
+            },
+            None,
+        )
+
+    return (
+        {"ok": False, "error": str(last_error or "单词发音生成失败，请稍后再试。")},
+        502,
+    )
+
+
 @login_required
 @require_POST
 @never_cache
 def word_tts(request, token_id):
     token = _owned_token(request, token_id)
-    try:
-        provider = get_tts_provider(request.user.accent)
-    except TTSError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
-
-    ssml_text = word_tts_ssml(token.surface)
-    use_ssml = bool(ssml_text) and hasattr(provider, "synthesize_ssml")
-    style = "word_ssml" if use_ssml else "natural"
-    speed = "word"
-    context = word_tts_context(token.surface)
-    if use_ssml:
-        context = f"{context}|ssml:v1"
-    cache_key = tts_cache_key(
-        provider=provider.provider,
-        model=provider.model,
-        voice=provider.voice,
-        style=style,
-        speed=speed,
-        rate=provider.speech_rate(speed),
+    payload, status = _word_tts_payload(
+        request,
         text=token.surface,
-        context=context,
+        word=token.surface,
+        accent=request.user.accent,
+        sentence=token.sentence,
     )
-    existing = (
-        WordTtsRender.objects.filter(owner=request.user, cache_key=cache_key)
-        .select_related("audio")
-        .first()
-    )
-    if existing is not None:
-        return JsonResponse(
-            {
-                "ok": True,
-                "audio_url": reverse(
-                    "serve_audio_asset", args=[existing.audio_id]
-                ),
-                "cached": True,
-                "duration_ms": existing.audio.duration_ms,
-            }
-        )
-
-    try:
-        consume_tts_quota(request.user, len(token.surface))
-        if use_ssml:
-            result = provider.synthesize_ssml(
-                ssml_text,
-                speed=speed,
-                style=style,
-            )
-        else:
-            result = provider.synthesize(
-                token.surface, speed=speed, style=style, context_text=context
-            )
-        render = create_word_tts_render(
-            owner=request.user,
-            sentence=token.sentence,
-            word=token.surface,
-            result=result,
-            cache_key=cache_key,
-        )
-    except TTSQuotaExceeded as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
-    except TTSError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
-    except Exception:
-        return JsonResponse(
-            {"ok": False, "error": "单词发音生成失败，请稍后再试。"},
-            status=500,
-        )
-
-    return JsonResponse(
-        {
-            "ok": True,
-            "audio_url": reverse("serve_audio_asset", args=[render.audio_id]),
-            "cached": False,
-            "duration_ms": result.duration_ms,
-        }
-    )
+    return JsonResponse(payload, status=status)
 
 
 @login_required
@@ -1665,72 +1765,14 @@ def word_lookup(request):
 @never_cache
 def lookup_tts(request, lookup_id):
     lookup = get_object_or_404(WordLookup, pk=lookup_id)
-    try:
-        provider = get_tts_provider(request.user.accent)
-    except TTSError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=503)
-
-    style = "natural"
-    speed = "word"
-    text = lookup.word
-    context = word_tts_context(text)
-    cache_key = tts_cache_key(
-        provider=provider.provider,
-        model=provider.model,
-        voice=provider.voice,
-        style=style,
-        speed=speed,
-        rate=provider.speech_rate(speed),
-        text=text,
-        context=context,
+    payload, status = _word_tts_payload(
+        request,
+        text=lookup.word,
+        word=lookup.display_word,
+        accent=request.user.accent,
+        lookup=lookup,
     )
-    existing = (
-        WordTtsRender.objects.filter(owner=request.user, cache_key=cache_key)
-        .select_related("audio")
-        .first()
-    )
-    if existing is not None:
-        return JsonResponse(
-            {
-                "ok": True,
-                "audio_url": reverse(
-                    "serve_audio_asset", args=[existing.audio_id]
-                ),
-                "cached": True,
-                "duration_ms": existing.audio.duration_ms,
-            }
-        )
-
-    try:
-        consume_tts_quota(request.user, len(text))
-        result = provider.synthesize(
-            text, speed=speed, style=style, context_text=context
-        )
-        render = create_word_tts_render(
-            owner=request.user,
-            lookup=lookup,
-            word=lookup.display_word,
-            result=result,
-            cache_key=cache_key,
-        )
-    except TTSQuotaExceeded as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=429)
-    except TTSError as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=502)
-    except Exception:
-        return JsonResponse(
-            {"ok": False, "error": "单词发音生成失败，请稍后再试。"},
-            status=500,
-        )
-
-    return JsonResponse(
-        {
-            "ok": True,
-            "audio_url": reverse("serve_audio_asset", args=[render.audio_id]),
-            "cached": False,
-            "duration_ms": result.duration_ms,
-        }
-    )
+    return JsonResponse(payload, status=status)
 
 
 @login_required

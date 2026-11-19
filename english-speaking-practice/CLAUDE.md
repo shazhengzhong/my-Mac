@@ -27,9 +27,10 @@
 ### 服务
 
 - 翻译：DeepSeek（`TRANSLATION_PROVIDER=deepseek`，Key 只在 `.env`）。
-- 发音合成：阿里云 CosyVoice 3.5 Plus（`TTS_PROVIDER=cosyvoice`）；美音/英音自定义音色也在 `.env`。
+- 句子/全文发音合成：阿里云 CosyVoice 3.5 Plus（`TTS_PROVIDER=cosyvoice`）；美音/英音自定义音色也在 `.env`。
+- 单词卡/查词页的**单词**发音优先使用 Microsoft Edge TTS（`WORD_TTS_PROVIDER=edge`），默认美音 `en-US-AriaNeural`；Edge 失败时自动回退到当前 CosyVoice。`edge-tts` 为非官方在线接口，音频会缓存到 `WordTtsRender`，不要把它当成 Azure SLA。
 - 单词/句子/全文/查词/慢速朗读都走 `get_tts_provider`，当前全部使用 CosyVoice。
-- 普通单词发音使用普通文本；已知问题词 `riverside` 使用 CMU SSML 覆盖。
+- 普通单词发音优先走 Edge TTS；Fallback 到 CosyVoice 时，已知问题词 `riverside` 仍使用 CMU SSML 覆盖。
 - 单词测评：腾讯云 SOE；拍照 OCR：腾讯云 OCR；Key 只在 `.env`。
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
 - 音节播放：单词卡内逐音节和整词拼读；音频仍来自当前 TTS provider。旧“自然拼读/音素”隐藏页面仍在，但没有入口，音质不合格，不要接回 UI。
@@ -37,7 +38,7 @@
 - 测评提示音采用组合方案：高分（≥70）用试听页 **11 号美音语音 “Great!”**；低分（<70）用试听页 **1 号木琴的低分音**（G4→C4 下行）。`static/audio/assess-high.wav` / `assess-low.wav` 分别是这两段音频。浏览器只播放一份 HTML audio；Web Audio 只作后备。
 - Android 壳 1.16 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `MediaPlayer` 播放 APK 内置的 `assets/assess_high.wav` / `assets/assess_low.wav`，走 `USAGE_ALARM` / `STREAM_ALARM` 音轨；壳内只播放原生音频，不叠加网页提示音。闹钟音量为 0 时回退到网页 WAV。
 - 单词测评每日额度 `ASSESSMENT_DAILY_REQUEST_LIMIT` 默认 100 次（`.env` 和 `.env.example` 同步为 100）。
-- 单词发音个别词有 TTS 语调问题。`riverside` 已加 CMU SSML 发音覆盖；其他词如果仍不准，优先考虑换 Microsoft/Azure 音源，不要继续硬编码单个词。
+- 单词发音的语调问题：CosyVoice 对孤立单词会加句末/焦点音高重音，CMU SSML 只能控制音素和词重音，不能保证词典式语调。因此单词卡改用 Edge TTS 的 Microsoft 音色；句子/全文仍用 CosyVoice，测评提示音不变。
 
 ### 运行与验证
 
@@ -47,7 +48,7 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-- 目前测试数：225 个，全部通过。
+- 目前测试数：227 个，全部通过。
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.4:8443/`

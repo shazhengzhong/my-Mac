@@ -70,6 +70,7 @@ from services.tts import (
     CosyVoiceTTSProvider,
     MockTTSProvider,
     TTSError,
+    TTSResult,
     VolcengineTTSProvider,
     get_tts_provider,
     tts_cache_key,
@@ -1295,6 +1296,59 @@ class WordTTSFlowTests(AudioTestBase):
         self.assertEqual(second_payload["audio_url"], payload["audio_url"])
         self.assertEqual(WordTtsRender.objects.count(), 1)
         counter.refresh_from_db()
+        self.assertEqual(counter.request_count, 1)
+
+    @override_settings(WORD_TTS_PROVIDER="edge")
+    @patch("diaries.views.EdgeTTSProvider")
+    def test_word_tts_prefers_edge_tts(self, edge_provider_class):
+        edge_provider = edge_provider_class.return_value
+        edge_provider.provider = "edge_tts"
+        edge_provider.model = "edge-tts"
+        edge_provider.voice = "en-US-AriaNeural"
+        edge_provider.speech_rate.return_value = 100
+        edge_provider.synthesize.return_value = TTSResult(
+            data=b"fake-edge-mp3",
+            content_type="audio/mpeg",
+            extension="mp3",
+            duration_ms=0,
+            provider="edge_tts",
+            model="edge-tts",
+            voice="en-US-AriaNeural",
+            style="natural",
+        )
+
+        token = self._token()
+        response = self.client.post(reverse("word_tts", args=[token.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+        render = WordTtsRender.objects.get(owner=self.owner)
+        self.assertEqual(render.provider, "edge_tts")
+        self.assertEqual(render.audio.content_type, "audio/mpeg")
+        edge_provider.synthesize.assert_called_once()
+
+    @override_settings(WORD_TTS_PROVIDER="edge")
+    @patch("diaries.views.get_tts_provider")
+    @patch("diaries.views.EdgeTTSProvider")
+    def test_word_tts_falls_back_to_regular_provider(
+        self, edge_provider_class, get_provider
+    ):
+        edge_provider = edge_provider_class.return_value
+        edge_provider.provider = "edge_tts"
+        edge_provider.model = "edge-tts"
+        edge_provider.voice = "en-US-AriaNeural"
+        edge_provider.speech_rate.return_value = 100
+        edge_provider.synthesize.side_effect = TTSError("edge unavailable")
+        get_provider.return_value = MockTTSProvider()
+
+        token = self._token()
+        response = self.client.post(reverse("word_tts", args=[token.id]))
+
+        self.assertEqual(response.status_code, 200)
+        render = WordTtsRender.objects.get(owner=self.owner)
+        self.assertEqual(render.provider, "mock")
+        self.assertEqual(render.audio.content_type, "audio/wav")
+        counter = UsageCounter.objects.get(user=self.owner, feature="tts")
         self.assertEqual(counter.request_count, 1)
 
     def test_word_tts_cache_is_per_user(self):
