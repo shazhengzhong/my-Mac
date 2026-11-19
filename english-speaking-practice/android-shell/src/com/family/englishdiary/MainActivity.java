@@ -31,7 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends Activity {
-    private static final String START_URL = "https://192.168.5.4:8443/";
+    private static final String START_URL = "https://192.168.5.2:8443/";
     private static final int REQUEST_AUDIO = 1002;
     private static final int REQUEST_GALLERY = 1003;
     private static final int REQUEST_CAMERA = 1004;
