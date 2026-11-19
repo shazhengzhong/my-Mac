@@ -146,6 +146,68 @@ def written_syllables(word: str) -> tuple[str, ...]:
     return (cleaned,)
 
 
+_IPA_VOWEL_SYMBOLS = set("aeiouæɑɒɔəɛɜɪʊʌɐɚɝɞɘɵɨʉɤɯ")
+_IPA_VOWEL_GROUPS = (
+    "eɪ",
+    "aɪ",
+    "ɔɪ",
+    "aʊ",
+    "oʊ",
+    "əʊ",
+    "ɪə",
+    "eə",
+    "ɛə",
+    "ʊə",
+    "ər",
+    "ɜr",
+    "ɑr",
+    "ɔr",
+    "ɪr",
+    "ɛr",
+    "ʊr",
+)
+
+
+def _ipa_syllable_count(ipa: str) -> int:
+    """Count vowel nuclei in broad IPA, treating diphthongs as one."""
+    cleaned = "".join(
+        char
+        for char in (ipa or "")
+        if char not in "ˈˌ/ " and char != "ː"
+    )
+    groups = sorted(_IPA_VOWEL_GROUPS, key=len, reverse=True)
+    count = 0
+    index = 0
+    while index < len(cleaned):
+        match = next(
+            (group for group in groups if cleaned.startswith(group, index)),
+            None,
+        )
+        if match:
+            count += 1
+            index += len(match)
+            continue
+        if cleaned[index] in _IPA_VOWEL_SYMBOLS:
+            count += 1
+        index += 1
+    return count
+
+
+def display_ipa(ipa: str) -> str:
+    """Return learner-facing IPA without stress marks on one-syllable words.
+
+    CMUdict and Britfone store primary stress on monosyllables (``N EY1 M D``),
+    but dictionaries conventionally omit the stress mark when there is only
+    one syllable to stress: ``/neɪmd/`` rather than ``/ˈneɪmd/``.
+    """
+    value = (ipa or "").strip()
+    if not value:
+        return ""
+    if _ipa_syllable_count(value) == 1:
+        return value.replace("ˈ", "").replace("ˌ", "")
+    return value
+
+
 def _ipa_from_cmu_phones(phones: list[str]) -> str:
     prefix = ""
     parts: list[str] = []
@@ -273,6 +335,15 @@ def phonetic_syllables_for_word(
                 ),
             )
         )
+    if len(result) == 1:
+        only = result[0]
+        result = [
+            PhoneticSyllable(
+                ipa=display_ipa(only.ipa),
+                phones=only.phones,
+                stressed=only.stressed,
+            )
+        ]
     return tuple(result)
 
 
@@ -349,7 +420,7 @@ def ipa_for_word(normalized_word: str, accent: str = "us") -> str | None:
     if not normalized_word:
         return None
     if accent == "uk":
-        return _britfone().get(normalized_word)
+        return display_ipa(_britfone().get(normalized_word, "")) or None
     if accent != "us":
         return None
     try:
@@ -382,7 +453,7 @@ def ipa_for_word(normalized_word: str, accent: str = "us") -> str | None:
         return None
 
     result = "".join(syllables_out).strip()
-    return result or None
+    return display_ipa(result) if result else None
 
 
 @lru_cache(maxsize=100_000)

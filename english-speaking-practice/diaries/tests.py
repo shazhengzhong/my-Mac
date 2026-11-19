@@ -56,6 +56,7 @@ from services.syllable_audio import (
 )
 from services.pronunciation import (
     accent_label,
+    display_ipa,
     analyze_sentence,
     clean_manual_ipa,
     ipa_for_word,
@@ -139,9 +140,9 @@ def make_diary(owner, *, chinese_text="今天天气很好。", title="测试日�
 class PronunciationServiceTests(TestCase):
     def test_known_words_have_american_ipa_and_stress(self):
         self.assertEqual(ipa_for_word("water"), "ˈwɔtər")
-        self.assertEqual(ipa_for_word("thought"), "ˈθɔt")
+        self.assertEqual(ipa_for_word("thought"), "θɔt")
         self.assertEqual(ipa_for_word("comfortable"), "ˈkʌmfərtəbəl")
-        self.assertEqual(ipa_for_word("don't"), "ˈdoʊnt")
+        self.assertEqual(ipa_for_word("don't"), "doʊnt")
 
     def test_unknown_word_is_not_guessed(self):
         self.assertIsNone(ipa_for_word("shazhengzhong"))
@@ -149,11 +150,19 @@ class PronunciationServiceTests(TestCase):
     def test_british_ipa_uses_britfone_and_learner_symbols(self):
         self.assertEqual(ipa_for_word("water", "uk"), "ˈwɔːtə")
         self.assertEqual(ipa_for_word("comfortable", "uk"), "ˈkʌmftəbəl")
-        self.assertEqual(ipa_for_word("thought", "uk"), "ˈθɔːt")
-        self.assertEqual(ipa_for_word("don't", "uk"), "ˈdəʊnt")
+        self.assertEqual(ipa_for_word("thought", "uk"), "θɔːt")
+        self.assertEqual(ipa_for_word("don't", "uk"), "dəʊnt")
+        self.assertEqual(ipa_for_word("named"), "neɪmd")
+        self.assertEqual(ipa_for_word("named", "uk"), "neɪmd")
         self.assertIsNone(ipa_for_word("shazhengzhong", "uk"))
         self.assertEqual(accent_label("uk"), "英式")
         self.assertEqual(accent_label("us"), "美式")
+
+    def test_monosyllables_omit_stress_marks(self):
+        self.assertEqual(display_ipa("ˈneɪmd"), "neɪmd")
+        self.assertEqual(display_ipa("ˈdəʊnt"), "dəʊnt")
+        self.assertEqual(display_ipa("ˈwɔtər"), "ˈwɔtər")
+        self.assertEqual(display_ipa("bəˈnænə"), "bəˈnænə")
 
     def test_phonics_breakdown_for_water(self):
         us = phonics_for_word("water", "us")
@@ -222,6 +231,8 @@ class TextServiceTests(TestCase):
         self.assertEqual([item.ipa for item in banana], ["bə", "ˈnæ", "nə"])
         tabby = phonetic_syllables_for_word("tabby")
         self.assertEqual([item.ipa for item in tabby], ["ˈtæ", "bi"])
+        named = phonetic_syllables_for_word("named")
+        self.assertEqual([item.ipa for item in named], ["neɪmd"])
 
     def test_split_lines_and_fallback_punctuation(self):
         self.assertEqual(
@@ -2576,6 +2587,18 @@ class WordLookupPageTests(DiaryFixtureMixin, TestCase):
         self.assertContains(response, "data-assess-button")
         self.assertEqual(WordLookup.objects.count(), 1)
 
+    def test_lookup_page_omits_stress_for_monosyllable(self):
+        lookup_word(self.owner, "named")
+        lookup = WordLookup.objects.get(word="named")
+        lookup.ipa = "ˈneɪmd"
+        lookup.ipa_uk = "ˈneɪmd"
+        lookup.save(update_fields=["ipa", "ipa_uk"])
+
+        response = self.client.post(reverse("word_lookup"), {"q": "named"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "/neɪmd/")
+        self.assertNotContains(response, "/ˈneɪmd/")
+
     def test_lookup_page_reuses_cached_word(self):
         first = self.client.post(reverse("word_lookup"), {"q": "water"})
         second = self.client.post(reverse("word_lookup"), {"q": "Water"})
@@ -3447,6 +3470,20 @@ class WordCardTests(AudioTestBase):
         )
         self.assertTrue(payload["syllable_sequence_url"])
         self.assertEqual(WordLookup.objects.count(), 1)
+
+    def test_word_card_omits_stress_for_monosyllable(self):
+        _diary, sentence = self.make_sentence(text="I named him.")
+        token = sentence.tokens.get(surface="named")
+        # Simulate an older stored value created before the display rule.
+        token.ipa = "ˈneɪmd"
+        token.ipa_uk = "ˈneɪmd"
+        token.save(update_fields=["ipa", "ipa_uk"])
+
+        response = self.client.post(reverse("word_card", args=[token.id]))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["ipa"], "neɪmd")
+        self.assertEqual(payload["phonetic_syllables"][0]["ipa"], "neɪmd")
 
     def test_word_card_reuses_cached_dictionary_entry(self):
         token = self._water_token()

@@ -44,7 +44,12 @@ from services.phonics import (
     syllable_audio_text,
     syllables_for_word,
 )
-from services.pronunciation import accent_label, normalize_word, syllable_hint
+from services.pronunciation import (
+    accent_label,
+    display_ipa,
+    normalize_word,
+    syllable_hint,
+)
 from services.syllable_audio import (
     SyllableAudioError,
     build_sequence,
@@ -449,7 +454,7 @@ def diary_detail(request, diary_id):
         sentence.tts_normal = tts_map.get((sentence.id, TtsRender.Speed.NORMAL))
         sentence.tts_slow = tts_map.get((sentence.id, TtsRender.Speed.SLOW))
         for token in sentence.tokens.all():
-            token.display_ipa = (
+            token.display_ipa = display_ipa(
                 token.ipa_uk if accent == "uk" else token.ipa
             )
             token.latest_assessment = assessment_map.get(token.id)
@@ -934,7 +939,9 @@ def word_card(request, token_id):
         {
             "ok": True,
             "word": token.surface,
-            "ipa": (token.ipa_uk if accent == "uk" else token.ipa) or "",
+            "ipa": display_ipa(
+                token.ipa_uk if accent == "uk" else token.ipa
+            ),
             "syllables": syllables,
             "phonetic_syllables": phonetic_syllables,
             "senses": senses,
@@ -2305,7 +2312,7 @@ def word_lookup(request):
 
     accent = request.user.accent
     if lookup is not None:
-        lookup.display_ipa = (
+        lookup.display_ipa = display_ipa(
             lookup.ipa_uk if accent == "uk" else lookup.ipa
         )
     lookup_url = reverse("word_lookup")

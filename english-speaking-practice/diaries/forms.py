@@ -2,7 +2,11 @@
 
 from django import forms
 
-from services.pronunciation import MAX_IPA_LENGTH, clean_manual_ipa
+from services.pronunciation import (
+    MAX_IPA_LENGTH,
+    clean_manual_ipa,
+    display_ipa,
+)
 
 from .models import DiaryEntry
 
@@ -83,7 +87,9 @@ class IpaCorrectionForm(forms.Form):
         for token in self.tokens:
             field_name = f"ipa_{token.pk.hex}"
             self.token_fields.append((token, field_name))
-            initial = token.ipa_uk if self.accent == "uk" else token.ipa
+            initial = display_ipa(
+                token.ipa_uk if self.accent == "uk" else token.ipa
+            )
             self.fields[field_name] = forms.CharField(
                 required=False,
                 initial=initial,
