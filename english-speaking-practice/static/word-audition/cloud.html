@@ -192,7 +192,7 @@
       <p class="eyebrow">英语口语练习 · 发音诊断</p>
       <h1>云 TTS 单词发音试听</h1>
       <p class="lead">
-        每个词有五种云/本地读法。点按钮试听，记住每个词你最喜欢哪一种，回复我
+        每个词有七种读法，B/C 是前一轮的参考。点按钮试听，记住每个词你最喜欢哪一种，回复我
         “单词 + 字母”即可，例如：<strong>my 选 G，tabby 选 G</strong>。
       </p>
     </header>
@@ -205,6 +205,8 @@
 
     <div class="legend">
       <span><strong>A</strong> 当前 CosyVoice</span>
+      <span><strong>B</strong> WebSocket</span>
+      <span><strong>C</strong> CMU 音素</span>
       <span><strong>E</strong> 火山单词</span>
       <span><strong>F</strong> 火山正常</span>
       <span><strong>G</strong> Microsoft Aria</span>
@@ -235,6 +237,8 @@
 
       const variants = [
         { key: "http", label: "A 当前 CosyVoice" },
+        { key: "ws", label: "B WebSocket" },
+        { key: "cmu", label: "C CMU 音素" },
         { key: "volc", label: "E 火山单词" },
         { key: "volc-normal", label: "F 火山正常" },
         { key: "ms-aria", label: "G Microsoft Aria" },
