@@ -123,7 +123,7 @@
     }
     .buttons {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 7px;
     }
     button {
@@ -144,11 +144,15 @@
     .ws { background: var(--amber-soft); color: var(--amber); }
     .cmu { background: var(--green-soft); color: var(--green); }
     .sentence { background: var(--coral-soft); color: var(--coral); }
+    .volc { background: #f5f3ff; color: #6d28d9; }
+    .volc-normal { background: #fdf2f8; color: #be185d; }
     .is-playing { color: #fff !important; }
     .http.is-playing { background: #475569; }
     .ws.is-playing { background: #d97706; }
     .cmu.is-playing { background: #16a34a; }
     .sentence.is-playing { background: #e11d48; }
+    .volc.is-playing { background: #7c3aed; }
+    .volc-normal.is-playing { background: #db2777; }
     .status {
       position: sticky;
       bottom: 12px;
@@ -184,22 +188,23 @@
       <p class="eyebrow">英语口语练习 · 发音诊断</p>
       <h1>单词发音 A/B 试听</h1>
       <p class="lead">
-        每个词有四种读法。点按钮试听，记住每个词你最喜欢哪一种，回复我
+        每个词有五种读法。点按钮试听，记住每个词你最喜欢哪一种，回复我
         “单词 + 字母”即可，例如：<strong>my 选 C，tabby 选 D</strong>。
       </p>
     </header>
 
     <p class="notice">
-      当前单词卡播放的是「A 当前单词」。句子朗读正确，但单词卡走的是另一条
-      合成路径。C 是强制 CMU 音素和重音，D 是从你听到的正确整句里截出来的词。
-      句子截取可能带句中的弱读/连读，正式单词卡不一定照搬。
+      当前单词卡播放的是「A 当前单词」。C 是强制 CMU 音素和重音；
+      E/F 是火山引擎英文音色的两种语速。D 整句截取已经去掉，不再使用。
+      腾讯云 TTS 账号尚未开通，开通后可以再加腾讯英文音色。
     </p>
 
     <div class="legend">
       <span><strong>A</strong> 当前单词（HTTP）</span>
       <span><strong>B</strong> WebSocket 单词</span>
       <span><strong>C</strong> CMU 音素</span>
-      <span><strong>D</strong> 整句截取</span>
+      <span><strong>E</strong> 火山单词语速</span>
+      <span><strong>F</strong> 火山正常语速</span>
     </div>
 
     <section class="grid" id="word-grid" aria-label="单词发音试听"></section>
@@ -228,7 +233,8 @@
         { key: "http", label: "A 当前单词" },
         { key: "ws", label: "B WebSocket" },
         { key: "cmu", label: "C CMU 音素" },
-        { key: "sentence", label: "D 整句截取" },
+        { key: "volc", label: "E 火山单词" },
+        { key: "volc-normal", label: "F 火山正常" },
       ];
 
       const statusText = document.getElementById("status-text");
