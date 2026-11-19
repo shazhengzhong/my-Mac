@@ -6,7 +6,9 @@ import hmac
 import io
 import json
 from pathlib import Path
+import shutil
 import tempfile
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 import wave
@@ -46,6 +48,11 @@ from services.phonics import (
     phonemes_for_ipa,
     phonics_for_word,
     syllable_audio_text,
+)
+from services.syllable_audio import (
+    SyllableAudioError,
+    build_sequence,
+    slice_word_audio,
 )
 from services.pronunciation import (
     accent_label,
@@ -3500,6 +3507,81 @@ class WordCardTests(AudioTestBase):
             self.client.post(reverse("word_card", args=[own_token.id])).status_code,
             302,
         )
+
+
+class SyllableSliceServiceTests(TestCase):
+    @staticmethod
+    def _silent_wav(duration_ms=1000, rate=24000):
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(rate)
+            wav_file.writeframes(
+                b"\x00\x00" * int(rate * duration_ms / 1000)
+            )
+        return buffer.getvalue()
+
+    @staticmethod
+    def _assessment(*spans):
+        return SimpleNamespace(
+            detail={
+                "words": [
+                    {
+                        "PhoneInfos": [
+                            {
+                                "MemBeginTime": start,
+                                "MemEndTime": end,
+                            }
+                            for start, end in spans
+                        ]
+                    }
+                ]
+            }
+        )
+
+    def test_banana_is_sliced_into_three_clips_and_sequence_has_full_word(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is required for syllable slicing")
+        spans = (
+            (0, 100),
+            (100, 300),
+            (300, 350),
+            (350, 550),
+            (550, 600),
+            (600, 900),
+        )
+        with patch("services.syllable_audio.get_assessor") as assessor_factory:
+            assessor_factory.return_value.assess.return_value = self._assessment(
+                *spans
+            )
+            sliced = slice_word_audio(
+                "banana",
+                "us",
+                self._silent_wav(),
+            )
+
+        self.assertEqual(
+            [clip.ipa for clip in sliced.clips],
+            ["bə", "ˈnæ", "nə"],
+        )
+        self.assertEqual(len(sliced.clips), 3)
+        self.assertTrue(all(clip.duration_ms > 0 for clip in sliced.clips))
+        sequence, duration_ms = build_sequence(sliced)
+        self.assertGreater(duration_ms, sliced.duration_ms)
+        self.assertGreater(duration_ms, sum(c.duration_ms for c in sliced.clips))
+        with wave.open(io.BytesIO(sequence), "rb") as wav_file:
+            self.assertGreater(wav_file.getnframes(), 0)
+
+    def test_phone_count_mismatch_falls_back_instead_of_guessing(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg is required for syllable slicing")
+        with patch("services.syllable_audio.get_assessor") as assessor_factory:
+            assessor_factory.return_value.assess.return_value = self._assessment(
+                (0, 100),
+            )
+            with self.assertRaises(SyllableAudioError):
+                slice_word_audio("banana", "us", self._silent_wav())
 
 
 class SyllableAudioTests(AudioTestBase):

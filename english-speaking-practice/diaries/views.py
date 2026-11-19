@@ -8,7 +8,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -45,6 +45,11 @@ from services.phonics import (
     syllables_for_word,
 )
 from services.pronunciation import accent_label, normalize_word, syllable_hint
+from services.syllable_audio import (
+    SyllableAudioError,
+    build_sequence,
+    slice_word_audio,
+)
 from services.translation import TranslationError, get_translator
 from services.text import chinese_paragraph_indices
 from services.tts import (
@@ -944,6 +949,319 @@ def word_card(request, token_id):
     )
 
 
+def _word_source_render(request, *, word, accent, sentence=None, lookup=None):
+    """Return the Edge whole-word render used as the syllable source.
+
+    This deliberately uses the same cache key as the normal word button, so
+    tapping a syllable before the word does not synthesize the same Edge word
+    twice.  Only Edge is used here: its whole-word reading is the pronunciation
+    the family already approved.
+    """
+    if settings.WORD_TTS_PROVIDER != "edge":
+        return None
+    voice = (
+        settings.WORD_TTS_EDGE_VOICE_UK
+        if accent == "uk"
+        else settings.WORD_TTS_EDGE_VOICE_US
+    )
+    try:
+        provider = EdgeTTSProvider(
+            voice=voice,
+            timeout=settings.WORD_TTS_EDGE_TIMEOUT,
+        )
+    except TTSError:
+        return None
+
+    cache_key = tts_cache_key(
+        provider=provider.provider,
+        model=provider.model,
+        voice=provider.voice,
+        style="natural",
+        speed="word",
+        rate=provider.speech_rate("word"),
+        text=word,
+        context="edge:v1",
+    )
+    existing = (
+        WordTtsRender.objects.filter(
+            owner=request.user,
+            cache_key=cache_key,
+        )
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return existing
+
+    try:
+        consume_tts_quota(request.user, len(word))
+        result = provider.synthesize(word, speed="word", style="natural")
+        return create_word_tts_render(
+            owner=request.user,
+            sentence=sentence,
+            lookup=lookup,
+            word=word,
+            result=result,
+            cache_key=cache_key,
+        )
+    except TTSQuotaExceeded as exc:
+        logger.warning("Word source TTS quota exhausted for %r: %s", word, exc)
+        return None
+    except TTSError as exc:
+        logger.warning("Word source TTS failed for %r: %s", word, exc)
+        return None
+    except IntegrityError:
+        return (
+            WordTtsRender.objects.filter(
+                owner=request.user,
+                cache_key=cache_key,
+            )
+            .select_related("audio")
+            .first()
+        )
+    except Exception:
+        logger.exception("Word source TTS failed unexpectedly for %r", word)
+        return None
+
+
+def _syllable_clip_cache_key(source, *, word, accent, clip):
+    return tts_cache_key(
+        provider="syllable_slice",
+        model=f"{source.provider}-word-slice-v1",
+        voice=source.voice,
+        style="phonics_slice",
+        speed="word",
+        rate=0,
+        text=f"{word}|{clip.index}|{clip.phones}",
+        context=f"{accent}|slice:v3|{source.cache_key}",
+    )
+
+
+def _ensure_syllable_slices(
+    request,
+    *,
+    word,
+    accent,
+    sentence=None,
+    lookup=None,
+):
+    """Return (source render, sliced word, [(clip render, created), ...])."""
+    source = _word_source_render(
+        request,
+        word=word,
+        accent=accent,
+        sentence=sentence,
+        lookup=lookup,
+    )
+    if source is None:
+        return None
+    try:
+        audio = read_private_bytes(source.audio.relative_path)
+        sliced = slice_word_audio(word, accent, audio)
+    except (OSError, ValueError, SyllableAudioError) as exc:
+        logger.warning("Syllable slicing failed for %r: %s", word, exc)
+        return None
+    except Exception:
+        logger.exception("Syllable slicing failed unexpectedly for %r", word)
+        return None
+
+    renders = []
+    for clip in sliced.clips:
+        cache_key = _syllable_clip_cache_key(
+            source,
+            word=word,
+            accent=accent,
+            clip=clip,
+        )
+        existing = (
+            WordTtsRender.objects.filter(
+                owner=request.user,
+                cache_key=cache_key,
+            )
+            .select_related("audio")
+            .first()
+        )
+        if existing is not None:
+            renders.append((existing, False))
+            continue
+        result = TTSResult(
+            data=clip.wav_bytes,
+            content_type="audio/wav",
+            extension="wav",
+            duration_ms=clip.duration_ms,
+            provider="syllable_slice",
+            model=f"{source.provider}-word-slice-v1",
+            voice=source.voice,
+            style="phonics_slice",
+        )
+        try:
+            render = create_word_tts_render(
+                owner=request.user,
+                sentence=sentence,
+                lookup=lookup,
+                word=word,
+                result=result,
+                cache_key=cache_key,
+            )
+        except IntegrityError:
+            render = (
+                WordTtsRender.objects.filter(
+                    owner=request.user,
+                    cache_key=cache_key,
+                )
+                .select_related("audio")
+                .first()
+            )
+            if render is None:
+                return None
+            renders.append((render, False))
+            continue
+        except Exception:
+            logger.exception(
+                "Could not store syllable clip for %r",
+                word,
+            )
+            return None
+        renders.append((render, True))
+
+    return source, sliced, tuple(renders)
+
+
+def _syllable_slice_payload(
+    request,
+    *,
+    word,
+    accent,
+    index,
+    sentence=None,
+    lookup=None,
+):
+    built = _ensure_syllable_slices(
+        request,
+        word=word,
+        accent=accent,
+        sentence=sentence,
+        lookup=lookup,
+    )
+    if built is None:
+        return None
+    _source, _sliced, renders = built
+    if index < 0 or index >= len(renders):
+        return None
+    render, created = renders[index]
+    return (
+        {
+            "ok": True,
+            "audio_url": reverse(
+                "serve_audio_asset",
+                args=[render.audio_id],
+            ),
+            "cached": not created,
+            "duration_ms": render.audio.duration_ms,
+        },
+        None,
+    )
+
+
+def _syllable_sequence_payload(
+    request,
+    *,
+    word,
+    accent,
+    sentence=None,
+    lookup=None,
+):
+    built = _ensure_syllable_slices(
+        request,
+        word=word,
+        accent=accent,
+        sentence=sentence,
+        lookup=lookup,
+    )
+    if built is None:
+        return None
+    source, sliced, _renders = built
+    cache_key = tts_cache_key(
+        provider="syllable_slice_sequence",
+        model=f"{source.provider}-word-sequence-v1",
+        voice=source.voice,
+        style="phonics_slice_sequence",
+        speed="word",
+        rate=0,
+        text=word + "|" + "|".join(clip.phones for clip in sliced.clips),
+        context=f"{accent}|slice-seq:v3|{source.cache_key}",
+    )
+    existing = (
+        WordTtsRender.objects.filter(
+            owner=request.user,
+            cache_key=cache_key,
+        )
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return (
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset",
+                    args=[existing.audio_id],
+                ),
+                "cached": True,
+                "duration_ms": existing.audio.duration_ms,
+            },
+            None,
+        )
+
+    try:
+        data, duration_ms = build_sequence(sliced)
+        result = TTSResult(
+            data=data,
+            content_type="audio/wav",
+            extension="wav",
+            duration_ms=duration_ms,
+            provider="syllable_slice_sequence",
+            model=f"{source.provider}-word-sequence-v1",
+            voice=source.voice,
+            style="phonics_slice_sequence",
+        )
+        render = create_word_tts_render(
+            owner=request.user,
+            sentence=sentence,
+            lookup=lookup,
+            word=word,
+            result=result,
+            cache_key=cache_key,
+        )
+    except IntegrityError:
+        render = (
+            WordTtsRender.objects.filter(
+                owner=request.user,
+                cache_key=cache_key,
+            )
+            .select_related("audio")
+            .first()
+        )
+        if render is None:
+            return None
+    except Exception:
+        logger.exception("Could not build syllable sequence for %r", word)
+        return None
+
+    return (
+        {
+            "ok": True,
+            "audio_url": reverse(
+                "serve_audio_asset",
+                args=[render.audio_id],
+            ),
+            "cached": False,
+            "duration_ms": render.audio.duration_ms,
+        },
+        None,
+    )
+
+
 @login_required
 @require_POST
 @never_cache
@@ -958,6 +1276,17 @@ def word_syllable_audio(request, token_id, index):
                 {"ok": False, "error": "这个音节不存在。"},
                 status=400,
             )
+        slice_payload = _syllable_slice_payload(
+            request,
+            word=token.surface,
+            accent=data.accent,
+            index=index,
+            sentence=token.sentence,
+        )
+        if slice_payload is not None:
+            payload, status = slice_payload
+            return JsonResponse(payload, status=status)
+
         item = phonetic[index]
         ssml = (
             f'<speak><phoneme alphabet="cmu" ph="{item.phones}">'
@@ -976,7 +1305,7 @@ def word_syllable_audio(request, token_id, index):
             accent=data.accent,
             cache_style="phonics_phonetic_syllable",
             context=(
-                f"{data.accent}:{data.normalized_word}:{index}:cmu:v1"
+                f"{data.accent}:{data.normalized_word}:{index}:cmu:v2"
             ),
             sentence=token.sentence,
             fallback_text=fallback,
@@ -1818,6 +2147,17 @@ def _phonics_audio_response(request, *, token=None, lookup=None, mode):
     if mode == "syllable":
         phonetic = list(data.phonetic_syllables)
         if phonetic:
+            slice_payload = _syllable_sequence_payload(
+                request,
+                word=display_word,
+                accent=data.accent,
+                sentence=token.sentence if token is not None else None,
+                lookup=lookup if lookup is not None else None,
+            )
+            if slice_payload is not None:
+                payload, status = slice_payload
+                return JsonResponse(payload, status=status)
+
             parts = []
             for item in phonetic:
                 parts.append(
@@ -1831,7 +2171,7 @@ def _phonics_audio_response(request, *, token=None, lookup=None, mode):
                 word=display_word,
                 accent=data.accent,
                 cache_style="phonics_phonetic_syllable_sequence",
-                context=f"{data.accent}:cmu-seq:v1",
+                context=f"{data.accent}:cmu-seq:v2",
                 sentence=token.sentence if token is not None else None,
                 lookup=lookup if lookup is not None else None,
                 fallback_text=syllable_audio_text(data),

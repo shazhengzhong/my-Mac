@@ -33,7 +33,7 @@
 - 普通单词发音优先走 Edge TTS；Fallback 到 CosyVoice 时，已知问题词 `riverside` 仍使用 CMU SSML 覆盖。
 - 单词测评：腾讯云 SOE；拍照 OCR：腾讯云 OCR；Key 只在 `.env`。
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
-- 音节播放：单词卡同时显示**拼写音节**和**音标音节**。拼写切分优先使用 Moby 公有领域 hyphenation 数据（banana→ba·na·na、tabby→tab·by），OOV 才回退 pyphen。音标音节来自 CMU/syllabify，并做了 maximal-onset 调整（banana→bə·ˈnæ·nə、tabby→ˈtæ·bi）；音节按钮和音节序列使用 CosyVoice 的 CMU SSML 生成，保证按音标发音；无 SSML 或 UK 音标数据时回退到 Edge 的拼写音节文本。整词发音仍优先 Edge。
+- 音节播放：单词卡同时显示**拼写音节**和**音标音节**。拼写切分优先使用 Moby 公有领域 hyphenation 数据（banana→ba·na·na、tabby→tab·by），OOV 才回退 pyphen。音标音节来自 CMU/syllabify，并做了 maximal-onset 调整（banana→bə·ˈnæ·nə、tabby→ˈtæ·bi）。**不要再用 CosyVoice 直接合成孤立音标音节**：`B AH0` 单独会读成 “Bye”、`N AE1` 会读成 “Nah”。现在音节按钮优先取 Edge 整词音频，用腾讯 SOE 返回的音素时间轴按 CMU 音节切分并缓存；音节序列是“各音节 + 最后完整整词”。需要服务器有 `ffmpeg`。切分失败（无 ffmpeg、SOE 无音素时间轴、OOV 数量不一致）才回退 CMU SSML。UK 无音标音节数据时仍回退到 Edge 拼写音节文本；整词发音仍优先 Edge。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
 - 测评提示音采用组合方案：高分（≥70）用试听页 **11 号美音语音 “Great!”**；低分（<70）用试听页 **1 号木琴的低分音**（G4→C4 下行）。`static/audio/assess-high.wav` / `assess-low.wav` 分别是这两段音频。浏览器只播放一份 HTML audio；Web Audio 只作后备。
 - Android 壳 1.16 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `MediaPlayer` 播放 APK 内置的 `assets/assess_high.wav` / `assets/assess_low.wav`，走 `USAGE_ALARM` / `STREAM_ALARM` 音轨；壳内只播放原生音频，不叠加网页提示音。闹钟音量为 0 时回退到网页 WAV。
@@ -48,7 +48,8 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-- 目前测试数：229 个，全部通过。
+- 目前测试数：231 个，全部通过。
+- 音节切分依赖系统 `ffmpeg`（当前已安装在 `/opt/homebrew/bin/ffmpeg`）；缺失时自动回退 CMU SSML。
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.2:8443/`（Mac 当前 IP；证书同时覆盖 .2 和 .4）

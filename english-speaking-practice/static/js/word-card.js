@@ -399,7 +399,7 @@
     const card = activeCard;
     const request = ++audioRequestId;
     setLoop(false);
-    setStatus("正在生成音节拼读…", "loading");
+    setStatus("正在生成音节拼读和整词…", "loading");
     try {
       const payload = await postJson(card.syllable_sequence_url);
       if (request !== audioRequestId || activeCard !== card) {
