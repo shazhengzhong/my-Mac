@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>腾讯 TTS 单词发音试听 · 英语口语练习</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #e4e7ec;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --green: #15803d;
+      --green-soft: #dcfce7;
+      --coral: #be123c;
+      --coral-soft: #fff1f2;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, #eff6ff 0, transparent 34%),
+        radial-gradient(circle at 100% 15%, #fff1f2 0, transparent 30%),
+        #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    main {
+      width: min(100%, 860px);
+      margin: 0 auto;
+      padding: 26px 14px calc(36px + env(safe-area-inset-bottom));
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--blue);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 5vw, 2rem);
+      letter-spacing: -0.02em;
+    }
+    .lead {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.65;
+    }
+    .notice {
+      margin: 14px 0 18px;
+      padding: 11px 13px;
+      border: 1px solid #dbeafe;
+      border-radius: 14px;
+      background: var(--blue-soft);
+      color: #1e40af;
+      font-size: 0.84rem;
+      line-height: 1.6;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+    .legend span {
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+    }
+    .grid { display: grid; gap: 13px; }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
+    }
+    .card-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .word {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 850;
+      letter-spacing: -0.02em;
+    }
+    .ipa {
+      color: var(--blue);
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    .hint {
+      margin: 4px 0 10px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+    .phones {
+      display: inline-block;
+      margin-left: 5px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #f1f5f9;
+      color: #475569;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.7rem;
+    }
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+    }
+    button {
+      appearance: none;
+      min-height: 38px;
+      padding: 7px 6px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.76rem;
+      font-weight: 800;
+      line-height: 1.2;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+    button:active { transform: scale(0.97); }
+    .http { background: #f1f5f9; color: #334155; }
+    .ws { background: var(--amber-soft); color: var(--amber); }
+    .cmu { background: var(--green-soft); color: var(--green); }
+    .sentence { background: var(--coral-soft); color: var(--coral); }
+    .volc { background: #f5f3ff; color: #6d28d9; }
+    .volc-normal { background: #fdf2f8; color: #be185d; }
+    .ms-aria { background: #ecfeff; color: #0e7490; }
+    .ms-guy { background: #eef2ff; color: #4338ca; }
+    .tc-101051, .tc-1051 { background: #f0fdf4; color: #166534; }
+    .tc-101050, .tc-1050 { background: #ecfdf5; color: #047857; }
+    .is-playing { color: #fff !important; }
+    .http.is-playing { background: #475569; }
+    .ws.is-playing { background: #d97706; }
+    .cmu.is-playing { background: #16a34a; }
+    .sentence.is-playing { background: #e11d48; }
+    .volc.is-playing { background: #7c3aed; }
+    .volc-normal.is-playing { background: #db2777; }
+    .ms-aria.is-playing { background: #0891b2; }
+    .ms-guy.is-playing { background: #4f46e5; }
+    .tc-101051.is-playing, .tc-1051.is-playing { background: #16a34a; }
+    .tc-101050.is-playing, .tc-1050.is-playing { background: #059669; }
+    .status {
+      position: sticky;
+      bottom: 12px;
+      margin-top: 16px;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      color: var(--muted);
+      font-size: 0.82rem;
+      backdrop-filter: blur(10px);
+    }
+    .status strong { color: var(--ink); }
+    .stop {
+      margin-left: 8px;
+      padding: 5px 9px;
+      border-color: var(--line);
+      background: #fff;
+      color: var(--muted);
+      min-height: auto;
+      border-radius: 999px;
+      font-size: 0.72rem;
+    }
+    @media (max-width: 560px) {
+      .buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">英语口语练习 · 发音诊断</p>
+      <h1>腾讯 TTS 单词发音试听</h1>
+      <p class="lead">
+        每个词有七种读法。点按钮试听，记住每个词你最喜欢哪一种，回复我
+        “单词 + 字母”即可，例如：<strong>my 选 I，tabby 选 I</strong>。
+      </p>
+    </header>
+
+    <p class="notice">
+      A 是当前 CosyVoice；G/H 是 Microsoft Aria/Guy（前一轮已确认正确）；
+      I/J 是腾讯云精品英文音色，K/L 是腾讯云标准英文音色。腾讯云 TTS 已开通，
+      对比重点看 I/J 是否达到 G/H 的自然度。
+    </p>
+
+    <div class="legend">
+      <span><strong>A</strong> 当前 CosyVoice</span>
+      <span><strong>G</strong> Microsoft Aria</span>
+      <span><strong>H</strong> Microsoft Guy</span>
+      <span><strong>I</strong> 腾讯 101051 女声</span>
+      <span><strong>J</strong> 腾讯 101050 男声</span>
+      <span><strong>K</strong> 腾讯 1051 女声</span>
+      <span><strong>L</strong> 腾讯 1050 男声</span>
+    </div>
+
+    <section class="grid" id="word-grid" aria-label="单词发音试听"></section>
+
+    <p class="status" role="status" aria-live="polite">
+      <span id="status-text">还没有播放。点一个按钮试听。</span>
+      <button type="button" class="stop" id="stop-button">停止</button>
+    </p>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const words = [
+        { key: "my", text: "My", ipa: "ˈmaɪ", phones: "M AY1", hint: "单音节；当前 IPA 不应该标重音符号。" },
+        { key: "has", text: "has", ipa: "ˈhæz", phones: "HH AE1 Z", hint: "单音节；单词卡应读强读 /hæz/，不应标重音符号。" },
+        { key: "named", text: "named", ipa: "ˈneɪmd", phones: "N EY1 M D", hint: "单音节；当前 IPA 不应该标重音符号。" },
+        { key: "rex", text: "Rex", ipa: "ˈrɛks", phones: "R EH1 K S", hint: "专有名词、单音节；当前 IPA 不应该标重音符号。" },
+        { key: "tabby", text: "tabby", ipa: "ˈtæbi", phones: "T AE1 B IY0", hint: "双音节，重音应在第一音节 TAB-by。" },
+        { key: "curly", text: "curly", ipa: "ˈkɜrli", phones: "K ER1 L IY0", hint: "双音节，重音应在第一音节 CUR-ly。" },
+        { key: "gets", text: "gets", ipa: "ˈɡɛts", phones: "G EH1 T S", hint: "单音节；当前 IPA 不应该标重音符号。" },
+      ];
+
+      const variants = [
+        { key: "http", label: "A 当前 CosyVoice" },
+        { key: "ms-aria", label: "G Microsoft Aria" },
+        { key: "ms-guy", label: "H Microsoft Guy" },
+        { key: "tc-101051", label: "I 腾讯 101051 女声" },
+        { key: "tc-101050", label: "J 腾讯 101050 男声" },
+        { key: "tc-1051", label: "K 腾讯 1051 女声" },
+        { key: "tc-1050", label: "L 腾讯 1050 男声" },
+      ];
+
+      const statusText = document.getElementById("status-text");
+      const stopButton = document.getElementById("stop-button");
+      const grid = document.getElementById("word-grid");
+      const players = new Map();
+      let current = null;
+
+      function clearPlaying() {
+        document.querySelectorAll("button.is-playing").forEach((button) => {
+          button.classList.remove("is-playing");
+        });
+      }
+
+      function stop() {
+        if (current) {
+          current.pause();
+          current.currentTime = 0;
+        }
+        current = null;
+        clearPlaying();
+        statusText.textContent = "已停止。";
+      }
+
+      function play(button, word, variant) {
+        const source = `${word.key}-${variant.key}.wav`;
+        if (current) {
+          current.pause();
+          current.currentTime = 0;
+        }
+        clearPlaying();
+        let audio = players.get(source);
+        if (!audio) {
+          audio = new Audio(source);
+          audio.preload = "auto";
+          audio.volume = 1.0;
+          players.set(source, audio);
+        }
+        current = audio;
+        audio.currentTime = 0;
+        audio.onended = () => {
+          if (current === audio) {
+            current = null;
+            clearPlaying();
+          }
+        };
+        button.classList.add("is-playing");
+        statusText.textContent = `正在播放：${word.text} · ${variant.label}`;
+        audio.play().catch(() => {
+          clearPlaying();
+          statusText.textContent = "播放失败，请再点一次或刷新页面。";
+        });
+      }
+
+      words.forEach((word) => {
+        const card = document.createElement("article");
+        card.className = "card";
+        const head = document.createElement("div");
+        head.className = "card-head";
+        const title = document.createElement("h2");
+        title.className = "word";
+        title.textContent = word.text;
+        const ipa = document.createElement("span");
+        ipa.className = "ipa";
+        ipa.textContent = `/${word.ipa}/`;
+        const phones = document.createElement("span");
+        phones.className = "phones";
+        phones.textContent = word.phones;
+        head.append(title, ipa, phones);
+        const hint = document.createElement("p");
+        hint.className = "hint";
+        hint.textContent = word.hint;
+        const buttons = document.createElement("div");
+        buttons.className = "buttons";
+        variants.forEach((variant) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = variant.key;
+          button.textContent = variant.label;
+          button.setAttribute(
+            "aria-label",
+            `播放 ${word.text} 的 ${variant.label}`,
+          );
+          button.addEventListener("click", () => play(button, word, variant));
+          buttons.appendChild(button);
+        });
+        card.append(head, hint, buttons);
+        grid.appendChild(card);
+      });
+
+      stopButton.addEventListener("click", stop);
+      window.addEventListener("pagehide", stop);
+    })();
+  </script>
+</body>
+</html>
