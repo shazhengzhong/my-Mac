@@ -17,7 +17,7 @@
 - 手机端顶部导航隐藏重复的「首页 / 邀请家人 / 成员」入口，这些入口仍在首页卡片中。
 - 当前图标：方案 **08 双语气泡**（白底，蓝色大气泡 + 珊瑚色小气泡）。
 - 日记详情页：上方“阅读”卡片（默认全英文、可切换全中文/全英文，可收起；全英文按空行分段，同一段内自动折行，全文正常/慢速朗读、逐词高亮、单词可点）；下方“中英对照”卡片（每句正常/慢读 + 整句录音 + 录音历史，单词可点）。
-- 正文不显示音标；点击单词从底部弹出半屏单词卡，卡内显示音标、中文词性/释义、单词发音/循环、单分数录音测评 + 录音回放、居中音节播放，支持向下滑关闭。
+- 正文不显示音标；点击单词从底部弹出半屏单词卡，卡内显示音标、中文词性/释义、单词发音/循环、单分数录音测评 + 录音回放、拼写音节 + 音标音节 + 音节拼读，支持向下滑关闭。
 - 旧的独立练习弹层、正文音标、中文释义朗读按钮、`view-mode` 切换均已移除。
 - 单词卡不显示“播放中/播放完毕”文字；底部状态区预留高度，避免上下闪跳。
 - 朗读中的当前词用蓝色高亮，已读过的词变蓝色字、不变暗；句子和全文 TTS 时间戳统一由 `static/js/tts-timings.js` 对齐。CosyVoice 的原始时间戳会出现重复词、跨句合并词（如 `freshI`）和省略号标点，时间轴脚本会去重、把合并词按字符比例拆开、跳过无法匹配的碎片，并在词与词之间补间，不再整段回退到按长度估算。
@@ -33,7 +33,7 @@
 - 普通单词发音优先走 Edge TTS；Fallback 到 CosyVoice 时，已知问题词 `riverside` 仍使用 CMU SSML 覆盖。
 - 单词测评：腾讯云 SOE；拍照 OCR：腾讯云 OCR；Key 只在 `.env`。
 - 单词卡释义：DeepSeek 按需生成结构化 `senses`（多词性/多释义），缓存在 `WordLookup.senses`；第一次点新词可能等待 1–2 秒。查词使用独立的每日额度 `WORD_LOOKUP_DAILY_REQUEST_LIMIT`（默认 100），不再挤占日记翻译的 20 次额度；额度不足时单词卡会显示具体提示。
-- 音节播放：单词卡内逐音节和整词拼读，也优先使用 Edge TTS，Edge 失败时回退 CosyVoice。音节边界仍来自 `pyphen`（排版断词，不是音标音节），且每个音节单独合成会被读成重读；Edge 只改善音色/清晰度，不解决切分和句子内弱读。
+- 音节播放：单词卡同时显示**拼写音节**和**音标音节**。拼写切分优先使用 Moby 公有领域 hyphenation 数据（banana→ba·na·na、tabby→tab·by），OOV 才回退 pyphen。音标音节来自 CMU/syllabify，并做了 maximal-onset 调整（banana→bə·ˈnæ·nə、tabby→ˈtæ·bi）；音节按钮和音节序列使用 CosyVoice 的 CMU SSML 生成，保证按音标发音；无 SSML 或 UK 音标数据时回退到 Edge 的拼写音节文本。整词发音仍优先 Edge。
 - 录音测评：单词卡只显示一个分数，录音保留并可在分数旁点击回放；低于 70 分播放警示音，70 分及以上播放正确提示音。
 - 测评提示音采用组合方案：高分（≥70）用试听页 **11 号美音语音 “Great!”**；低分（<70）用试听页 **1 号木琴的低分音**（G4→C4 下行）。`static/audio/assess-high.wav` / `assess-low.wav` 分别是这两段音频。浏览器只播放一份 HTML audio；Web Audio 只作后备。
 - Android 壳 1.16 起通过 `FamilyFeedback.playAssessmentTone()` 用原生 `MediaPlayer` 播放 APK 内置的 `assets/assess_high.wav` / `assets/assess_low.wav`，走 `USAGE_ALARM` / `STREAM_ALARM` 音轨；壳内只播放原生音频，不叠加网页提示音。闹钟音量为 0 时回退到网页 WAV。
@@ -48,7 +48,7 @@ source .venv/bin/activate
 python manage.py test
 ```
 
-- 目前测试数：227 个，全部通过。
+- 目前测试数：229 个，全部通过。
 - HTTP 开发服务：`python manage.py runserver 0.0.0.0:8000`
 - HTTPS 局域网服务：`.venv/bin/python manage.py runserver_plus 0.0.0.0:8443 --cert-file var/certs/lan-cert.pem --key-file var/certs/lan-key.pem`
 - 家庭手机访问地址：`https://192.168.5.2:8443/`（Mac 当前 IP；证书同时覆盖 .2 和 .4）

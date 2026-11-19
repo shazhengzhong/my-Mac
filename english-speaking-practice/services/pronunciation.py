@@ -18,6 +18,9 @@ _PYPHEN = pyphen.Pyphen(lang="en_US")
 _BRITFONE_PATH = (
     Path(__file__).resolve().parent / "data" / "britfone.main.3.0.1.csv"
 )
+_MOBY_PATH = (
+    Path(__file__).resolve().parent / "data" / "moby-hyphenation.txt"
+)
 
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)*")
 MAX_IPA_LENGTH = 120
@@ -66,6 +69,211 @@ _ARPABET_TO_IPA = {
     "AXR": "ɚ",
 }
 _STRESS_MARKS = {"1": "ˈ", "2": "ˌ"}
+_ARPABET_VOWELS = {
+    "AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER",
+    "EY", "IH", "IY", "OW", "OY", "UH", "UW",
+}
+
+
+@dataclass(frozen=True)
+class PhoneticSyllable:
+    """One CMU-derived syllable, used for the phonetic syllable row."""
+
+    ipa: str
+    phones: str
+    stressed: bool
+
+
+@lru_cache(maxsize=1)
+def _moby_entries() -> dict[str, tuple[tuple[str, ...], ...]]:
+    """Load Moby's public-domain written hyphenation data.
+
+    Moby stores alternate hyphenations for some words.  We keep all candidates
+    and choose a balanced, lower-case split later.
+    """
+    entries: dict[str, tuple[tuple[str, ...], ...]] = {}
+    if not _MOBY_PATH.exists():
+        return entries
+    with _MOBY_PATH.open(encoding="latin-1") as handle:
+        for raw_line in handle:
+            line = raw_line.strip("\r\n")
+            if not line or " " in line or "\xa5" not in line:
+                continue
+            parts = tuple(part for part in line.split("\xa5") if part)
+            word = "".join(parts)
+            if not word or not re.fullmatch(r"[A-Za-z][A-Za-z'’-]*", word):
+                continue
+            key = word.lower().replace("’", "'")
+            entries.setdefault(key, ())
+            entries[key] += (parts,)
+    return entries
+
+
+def written_syllables(word: str) -> tuple[str, ...]:
+    """Return balanced written syllables, preferring Moby over hyphenation.
+
+    The original casing is preserved by slicing the input word using the
+    lengths from the chosen dictionary entry.
+    """
+    cleaned = (word or "").strip()
+    if not cleaned:
+        return ()
+    key = cleaned.lower().replace("’", "'")
+    candidates = _moby_entries().get(key, ())
+    if candidates:
+        def score(parts: tuple[str, ...]) -> tuple:
+            lengths = [len(part) for part in parts]
+            mean = sum(lengths) / len(lengths)
+            variance = sum((length - mean) ** 2 for length in lengths)
+            # Prefer lower-case entries, then balanced lengths.
+            return (0 if "".join(parts).islower() else 1, variance, -len(parts))
+
+        parts = min(candidates, key=score)
+        lengths = [len(part) for part in parts]
+        result = []
+        cursor = 0
+        for length in lengths:
+            result.append(cleaned[cursor : cursor + length])
+            cursor += length
+        if cursor == len(cleaned) and all(result):
+            return tuple(result)
+
+    hinted = syllable_hint(cleaned)
+    if "·" in hinted:
+        parts = tuple(part for part in hinted.split("·") if part)
+        if parts and "".join(parts) == cleaned:
+            return parts
+    return (cleaned,)
+
+
+def _ipa_from_cmu_phones(phones: list[str]) -> str:
+    prefix = ""
+    parts: list[str] = []
+    for token in phones:
+        match = re.fullmatch(r"([A-Z]+)([012])?", token)
+        if not match:
+            return ""
+        symbol, stress_text = match.groups()
+        if symbol in _ARPABET_VOWELS:
+            stress = int(stress_text or 0)
+            if stress in (1, 2) and not prefix:
+                prefix = _STRESS_MARKS[str(stress)]
+            if symbol == "AH":
+                parts.append("ə" if stress == 0 else "ʌ")
+            elif symbol == "ER":
+                parts.append("ər" if stress == 0 else "ɜr")
+            else:
+                mapped = _ARPABET_TO_IPA.get(symbol)
+                if mapped is None:
+                    return ""
+                parts.append(mapped)
+        else:
+            mapped = _ARPABET_TO_IPA.get(symbol)
+            if mapped is None:
+                return ""
+            parts.append(mapped)
+    return prefix + "".join(parts)
+
+
+@lru_cache(maxsize=100_000)
+def phonetic_syllables_for_word(
+    word: str, accent: str = "us"
+) -> tuple[PhoneticSyllable, ...]:
+    """Return CMU phonetic syllables with stress marks.
+
+    British IPA currently has no phonetic syllable boundary data, so the
+    phonetic row is US-only; UK callers fall back to the written row.
+    """
+    if accent != "us":
+        return ()
+    normalized = normalize_word(word)
+    if not normalized:
+        return ()
+    try:
+        parsed = syllabify(normalized)
+    except (ValueError, KeyError, IndexError):
+        return ()
+
+    syllables: list[PhoneticSyllable] = []
+    try:
+        for parsed_word in parsed.words:
+            for syllable in parsed_word.syllables:
+                stress = int(getattr(syllable, "stress", 0) or 0)
+                prefix = _STRESS_MARKS.get(str(stress), "")
+                phones: list[str] = []
+                ipa_parts: list[str] = []
+                for part in (syllable.onset, syllable.nucleus, syllable.coda):
+                    for phoneme in part:
+                        symbol = getattr(phoneme, "phoneme", None)
+                        if not symbol:
+                            continue
+                        if symbol in _ARPABET_VOWELS:
+                            vowel_stress = int(
+                                getattr(phoneme, "stress", 0) or 0
+                            )
+                            phones.append(f"{symbol}{vowel_stress}")
+                            if symbol == "AH":
+                                ipa_parts.append(
+                                    "ə" if vowel_stress == 0 else "ʌ"
+                                )
+                            elif symbol == "ER":
+                                ipa_parts.append(
+                                    "ər" if vowel_stress == 0 else "ɜr"
+                                )
+                            else:
+                                mapped = _ARPABET_TO_IPA.get(symbol)
+                                if mapped is None:
+                                    return ()
+                                ipa_parts.append(mapped)
+                        else:
+                            phones.append(symbol)
+                            mapped = _ARPABET_TO_IPA.get(symbol)
+                            if mapped is None:
+                                return ()
+                            ipa_parts.append(mapped)
+                syllables.append(
+                    PhoneticSyllable(
+                        ipa=prefix + "".join(ipa_parts),
+                        phones=" ".join(phones),
+                        stressed=bool(prefix),
+                    )
+                )
+    except (AttributeError, TypeError):
+        return ()
+
+    # Apply the maximal-onset principle across an empty onset.  This turns
+    # syllabify's ba-nan-a into ba-na-na and tab-by's coda /b/ into the next
+    # onset for phonetic display.
+    phone_lists = [item.phones.split() for item in syllables]
+    for index in range(len(phone_lists) - 1):
+        current = phone_lists[index]
+        following = phone_lists[index + 1]
+        if not current or not following:
+            continue
+        following_starts_vowel = bool(
+            re.fullmatch(r"[A-Z]+[012]", following[0])
+        )
+        current_ends_consonant = not bool(
+            re.fullmatch(r"[A-Z]+[012]", current[-1])
+        )
+        if following_starts_vowel and current_ends_consonant:
+            following.insert(0, current.pop())
+    result: list[PhoneticSyllable] = []
+    for phones in phone_lists:
+        ipa = _ipa_from_cmu_phones(phones)
+        if not ipa:
+            return ()
+        result.append(
+            PhoneticSyllable(
+                ipa=ipa,
+                phones=" ".join(phones),
+                stressed=any(
+                    bool(re.fullmatch(r"[A-Z]+[12]", phone))
+                    for phone in phones
+                ),
+            )
+        )
+    return tuple(result)
 
 
 @dataclass(frozen=True)
@@ -179,14 +387,32 @@ def ipa_for_word(normalized_word: str, accent: str = "us") -> str | None:
 
 @lru_cache(maxsize=100_000)
 def syllable_hint(word: str) -> str:
-    """Return a written syllable split such as ``com·fort·able``.
+    """Return a written syllable split such as ``ba·na·na``.
 
-    One-syllable words and words the dictionary cannot split return an empty
-    string so the UI does not repeat the whole word.
+    Moby's public-domain hyphenation list is preferred; pyphen is used only as
+    an OOV fallback.  One-syllable words return an empty string.
     """
     cleaned = (word or "").strip()
     if not cleaned or len(cleaned) < 4:
         return ""
+    key = cleaned.lower().replace("’", "'")
+    candidates = _moby_entries().get(key, ())
+    if candidates:
+        def score(parts: tuple[str, ...]) -> tuple:
+            lengths = [len(part) for part in parts]
+            mean = sum(lengths) / len(lengths)
+            variance = sum((length - mean) ** 2 for length in lengths)
+            return (0 if "".join(parts).islower() else 1, variance, -len(parts))
+
+        parts = min(candidates, key=score)
+        lengths = [len(part) for part in parts]
+        result = []
+        cursor = 0
+        for length in lengths:
+            result.append(cleaned[cursor : cursor + length])
+            cursor += length
+        if cursor == len(cleaned) and all(result):
+            return "·".join(result)
     try:
         hinted = _PYPHEN.inserted(cleaned, "·")
     except (ValueError, KeyError):

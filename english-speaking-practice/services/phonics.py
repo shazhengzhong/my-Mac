@@ -16,9 +16,11 @@ from pathlib import Path
 import wave
 
 from services.pronunciation import (
+    PhoneticSyllable,
     accent_label,
     ipa_for_word,
     normalize_word,
+    phonetic_syllables_for_word,
     syllable_hint,
 )
 
@@ -32,6 +34,7 @@ class PhonicsData:
     display_word: str
     normalized_word: str
     syllables: tuple[str, ...]
+    phonetic_syllables: tuple[PhoneticSyllable, ...]
     ipa: str
     phonemes: tuple[str, ...]
     accent: str
@@ -122,6 +125,7 @@ def phonics_for_word(display_word: str, accent: str = "us") -> PhonicsData:
         display_word=(display_word or "").strip(),
         normalized_word=normalized,
         syllables=syllables_for_word(display_word),
+        phonetic_syllables=phonetic_syllables_for_word(normalized, accent),
         ipa=ipa,
         phonemes=phonemes_for_ipa(ipa),
         accent=accent if accent in {"us", "uk"} else "us",

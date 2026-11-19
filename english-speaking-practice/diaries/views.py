@@ -904,15 +904,21 @@ def word_card(request, token_id):
             ]
 
     accent = request.user.accent
-    syllables = list(syllables_for_word(token.surface))
+    phonics = phonics_for_word(token.surface, accent)
+    syllables = list(phonics.syllables)
+    phonetic_syllables = [
+        {"ipa": item.ipa, "stressed": item.stressed}
+        for item in phonics.phonetic_syllables
+    ]
     tts = _tts_status()
     assessment = _assessment_status()
     syllable_audio_urls = []
     syllable_sequence_url = ""
+    button_count = len(phonetic_syllables) or len(syllables)
     if tts["ready"]:
         syllable_audio_urls = [
             reverse("word_syllable_audio", args=[token.id, index])
-            for index in range(len(syllables))
+            for index in range(button_count)
         ]
         syllable_sequence_url = reverse(
             "word_phonics_audio",
@@ -925,6 +931,7 @@ def word_card(request, token_id):
             "word": token.surface,
             "ipa": (token.ipa_uk if accent == "uk" else token.ipa) or "",
             "syllables": syllables,
+            "phonetic_syllables": phonetic_syllables,
             "senses": senses,
             "warning": warning,
             "tts_ready": tts["ready"],
@@ -941,9 +948,41 @@ def word_card(request, token_id):
 @require_POST
 @never_cache
 def word_syllable_audio(request, token_id, index):
-    """Synthesize one written syllable for the word card."""
+    """Synthesize one syllable, using CMU phonemes when available."""
     token = _owned_token(request, token_id)
     data = phonics_for_word(token.surface, request.user.accent)
+    phonetic = list(data.phonetic_syllables)
+    if phonetic:
+        if index < 0 or index >= len(phonetic):
+            return JsonResponse(
+                {"ok": False, "error": "这个音节不存在。"},
+                status=400,
+            )
+        item = phonetic[index]
+        ssml = (
+            f'<speak><phoneme alphabet="cmu" ph="{item.phones}">'
+            f"{item.ipa}</phoneme></speak>"
+        )
+        fallback = (
+            data.syllables[index]
+            if index < len(data.syllables)
+            else ""
+        )
+        payload, status = _phonetic_ssml_payload(
+            request,
+            ssml_text=ssml,
+            text=item.phones,
+            word=token.surface,
+            accent=data.accent,
+            cache_style="phonics_phonetic_syllable",
+            context=(
+                f"{data.accent}:{data.normalized_word}:{index}:cmu:v1"
+            ),
+            sentence=token.sentence,
+            fallback_text=fallback,
+        )
+        return JsonResponse(payload, status=status)
+
     if index < 0 or index >= len(data.syllables):
         return JsonResponse(
             {"ok": False, "error": "这个音节不存在。"},
@@ -1071,6 +1110,157 @@ def _word_text_audio_payload(
     return (
         {"ok": False, "error": str(last_error or error_message)},
         502,
+    )
+
+
+def _phonetic_ssml_payload(
+    request,
+    *,
+    ssml_text: str,
+    text: str,
+    word: str,
+    accent: str,
+    cache_style: str,
+    context: str,
+    sentence=None,
+    lookup=None,
+    fallback_text: str = "",
+    error_message: str = "音节发音生成失败，请稍后再试。",
+):
+    """Synthesize CMU/IPA syllables through the regular SSML provider."""
+    try:
+        provider = get_tts_provider(accent)
+    except TTSError as exc:
+        if fallback_text:
+            return _word_text_audio_payload(
+                request,
+                text=fallback_text,
+                word=word,
+                accent=accent,
+                cache_style=cache_style,
+                context=context,
+                sentence=sentence,
+                lookup=lookup,
+                error_message=error_message,
+            )
+        return {"ok": False, "error": str(exc)}, 503
+
+    if not hasattr(provider, "synthesize_ssml"):
+        if fallback_text:
+            return _word_text_audio_payload(
+                request,
+                text=fallback_text,
+                word=word,
+                accent=accent,
+                cache_style=cache_style,
+                context=context,
+                sentence=sentence,
+                lookup=lookup,
+                error_message=error_message,
+            )
+        return {
+            "ok": False,
+            "error": "当前语音服务不支持音标音节。",
+        }, 503
+
+    cache_key = tts_cache_key(
+        provider=provider.provider,
+        model=provider.model,
+        voice=provider.voice,
+        style=cache_style,
+        speed="word",
+        rate=provider.speech_rate("word"),
+        text=text,
+        context=context,
+    )
+    existing = (
+        WordTtsRender.objects.filter(
+            owner=request.user,
+            cache_key=cache_key,
+        )
+        .select_related("audio")
+        .first()
+    )
+    if existing is not None:
+        return (
+            {
+                "ok": True,
+                "audio_url": reverse(
+                    "serve_audio_asset",
+                    args=[existing.audio_id],
+                ),
+                "cached": True,
+                "duration_ms": existing.audio.duration_ms,
+            },
+            None,
+        )
+
+    try:
+        consume_tts_quota(request.user, len(text))
+        result = provider.synthesize_ssml(
+            ssml_text,
+            speed="word",
+            style="word_ssml",
+        )
+        render = create_word_tts_render(
+            owner=request.user,
+            sentence=sentence,
+            lookup=lookup,
+            word=word,
+            result=result,
+            cache_key=cache_key,
+        )
+    except TTSQuotaExceeded as exc:
+        return {"ok": False, "error": str(exc)}, 429
+    except TTSError as exc:
+        logger.warning(
+            "Phonetic syllable TTS failed for %r: %s",
+            word,
+            exc,
+        )
+        if fallback_text:
+            return _word_text_audio_payload(
+                request,
+                text=fallback_text,
+                word=word,
+                accent=accent,
+                cache_style=cache_style,
+                context=context,
+                sentence=sentence,
+                lookup=lookup,
+                error_message=error_message,
+            )
+        return {"ok": False, "error": str(exc)}, 502
+    except Exception:
+        logger.exception(
+            "Phonetic syllable TTS failed unexpectedly for %r",
+            word,
+        )
+        if fallback_text:
+            return _word_text_audio_payload(
+                request,
+                text=fallback_text,
+                word=word,
+                accent=accent,
+                cache_style=cache_style,
+                context=context,
+                sentence=sentence,
+                lookup=lookup,
+                error_message=error_message,
+            )
+        return {"ok": False, "error": error_message}, 500
+
+    return (
+        {
+            "ok": True,
+            "audio_url": reverse(
+                "serve_audio_asset",
+                args=[render.audio_id],
+            ),
+            "cached": False,
+            "duration_ms": result.duration_ms,
+        },
+        None,
     )
 
 
@@ -1626,6 +1816,29 @@ def _phonics_audio_response(request, *, token=None, lookup=None, mode):
     )
 
     if mode == "syllable":
+        phonetic = list(data.phonetic_syllables)
+        if phonetic:
+            parts = []
+            for item in phonetic:
+                parts.append(
+                    f'<phoneme alphabet="cmu" ph="{item.phones}">'
+                    f"{item.ipa}</phoneme><break time=\"300ms\"/>"
+                )
+            payload, status = _phonetic_ssml_payload(
+                request,
+                ssml_text="<speak>" + "".join(parts) + "</speak>",
+                text=" ".join(item.phones for item in phonetic),
+                word=display_word,
+                accent=data.accent,
+                cache_style="phonics_phonetic_syllable_sequence",
+                context=f"{data.accent}:cmu-seq:v1",
+                sentence=token.sentence if token is not None else None,
+                lookup=lookup if lookup is not None else None,
+                fallback_text=syllable_audio_text(data),
+                error_message="音节示范音频保存失败，请稍后再试。",
+            )
+            return JsonResponse(payload, status=status)
+
         payload, status = _word_text_audio_payload(
             request,
             text=syllable_audio_text(data),

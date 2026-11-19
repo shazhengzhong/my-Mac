@@ -1,0 +1,4 @@
+Moby Hyphenation List
+Created by Grady Ward. Public domain (released 2001).
+Source: Project Gutenberg eBook #3204 / Moby Project.
+The file uses the ASCII separator 0xA5 between written syllables.

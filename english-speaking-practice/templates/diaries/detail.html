@@ -213,8 +213,12 @@
         <div class="word-sheet-senses" data-word-sheet-senses></div>
 
         <div class="word-sheet-syllables" data-word-sheet-syllables hidden>
-          <div class="word-sheet-section-head">
-            <span>音节</span>
+          <div class="word-sheet-section-head" data-word-sheet-written-head>
+            <span>拼写音节</span>
+          </div>
+          <div class="word-sheet-written-syllables" data-word-sheet-written-syllables></div>
+          <div class="word-sheet-section-head word-sheet-phonetic-head">
+            <span data-word-sheet-phonetic-head>音标音节</span>
           </div>
           <div class="word-sheet-syllable-row">
             <div class="word-sheet-syllable-list" data-word-sheet-syllable-list></div>
@@ -222,8 +226,8 @@
               class="word-sheet-syllable-all"
               type="button"
               data-word-sheet-syllable-all
-              aria-label="播放整词拼读"
-              title="播放整词拼读"
+              aria-label="播放音节拼读"
+              title="播放音节拼读"
             >
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"></path>
@@ -264,6 +268,6 @@
   <script src="{% static 'js/read-aloud.js' %}?v=20261116b" defer></script>
   <script src="{% static 'js/diary-reader.js' %}?v=20261116b" defer></script>
   <script src="{% static 'js/recording-delete.js' %}?v=20261101b" defer></script>
-  <script src="{% static 'js/word-card.js' %}?v=20261115h" defer></script>
+  <script src="{% static 'js/word-card.js' %}?v=20261119a" defer></script>
   <script src="{% static 'js/full-english.js' %}?v=20261115d" defer></script>
 {% endblock %}

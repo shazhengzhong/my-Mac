@@ -52,7 +52,9 @@ from services.pronunciation import (
     analyze_sentence,
     clean_manual_ipa,
     ipa_for_word,
+    phonetic_syllables_for_word,
     syllable_hint,
+    written_syllables,
 )
 from services.text import (
     chinese_paragraph_indices,
@@ -200,6 +202,20 @@ class PronunciationServiceTests(TestCase):
 
 
 class TextServiceTests(TestCase):
+    def test_moby_written_syllables_match_learner_expectations(self):
+        self.assertEqual(written_syllables("banana"), ("ba", "na", "na"))
+        self.assertEqual(written_syllables("tabby"), ("tab", "by"))
+        self.assertEqual(
+            written_syllables("vegetable"),
+            ("veg", "e", "ta", "ble"),
+        )
+
+    def test_phonetic_syllables_use_maximal_onset_and_stress(self):
+        banana = phonetic_syllables_for_word("banana")
+        self.assertEqual([item.ipa for item in banana], ["bə", "ˈnæ", "nə"])
+        tabby = phonetic_syllables_for_word("tabby")
+        self.assertEqual([item.ipa for item in tabby], ["ˈtæ", "bi"])
+
     def test_split_lines_and_fallback_punctuation(self):
         self.assertEqual(
             split_english_sentences("One sentence. Two sentences?\nThird!"),

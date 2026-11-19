@@ -13,6 +13,9 @@
   const ipaElement = sheet.querySelector("[data-word-sheet-ipa]");
   const sensesElement = sheet.querySelector("[data-word-sheet-senses]");
   const syllablesSection = sheet.querySelector("[data-word-sheet-syllables]");
+  const writtenSyllables = sheet.querySelector("[data-word-sheet-written-syllables]");
+  const writtenHead = sheet.querySelector("[data-word-sheet-written-head]");
+  const phoneticHead = sheet.querySelector("[data-word-sheet-phonetic-head]");
   const syllableList = sheet.querySelector("[data-word-sheet-syllable-list]");
   const syllableAll = sheet.querySelector("[data-word-sheet-syllable-all]");
   const statusElement = sheet.querySelector("[data-word-sheet-status]");
@@ -318,19 +321,37 @@
       return;
     }
     syllableList.replaceChildren();
-    const syllables = Array.isArray(data.syllables) ? data.syllables : [];
-    if (!syllables.length || !data.tts_ready) {
+    const written = Array.isArray(data.syllables) ? data.syllables : [];
+    const phonetic = Array.isArray(data.phonetic_syllables)
+      ? data.phonetic_syllables
+      : [];
+    if ((!written.length && !phonetic.length) || !data.tts_ready) {
       syllablesSection.hidden = true;
       return;
     }
     syllablesSection.hidden = false;
 
-    syllables.forEach((syllable, index) => {
+    const showWritten = Boolean(phonetic.length) && written.length >= 2;
+    if (writtenSyllables) {
+      writtenSyllables.textContent = written.join(" · ");
+      writtenSyllables.hidden = !showWritten;
+    }
+    if (writtenHead) {
+      writtenHead.hidden = !showWritten;
+    }
+    if (phoneticHead) {
+      phoneticHead.textContent = phonetic.length ? "音标音节" : "音节";
+    }
+
+    const labels = phonetic.length
+      ? phonetic.map((item) => item.ipa)
+      : written;
+    labels.forEach((label, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "word-syllable";
-      button.textContent = syllable;
-      button.setAttribute("aria-label", `播放音节 ${syllable}`);
+      button.textContent = label;
+      button.setAttribute("aria-label", `播放音节 ${label}`);
       button.addEventListener("click", () => {
         void playSyllable(index);
       });
@@ -378,7 +399,7 @@
     const card = activeCard;
     const request = ++audioRequestId;
     setLoop(false);
-    setStatus("正在生成整词拼读…", "loading");
+    setStatus("正在生成音节拼读…", "loading");
     try {
       const payload = await postJson(card.syllable_sequence_url);
       if (request !== audioRequestId || activeCard !== card) {
@@ -387,7 +408,7 @@
       await playUrl(payload.audio_url, { autoplay: true });
     } catch (error) {
       if (request === audioRequestId) {
-        setStatus(error.message || "整词拼读生成失败，请重试。", "error");
+        setStatus(error.message || "音节拼读生成失败，请重试。", "error");
       }
     }
   }
