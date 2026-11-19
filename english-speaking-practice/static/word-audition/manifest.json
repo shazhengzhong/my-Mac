@@ -1,0 +1,93 @@
+{
+  "my": {
+    "key": "my",
+    "text": "My",
+    "ipa": "ˈmaɪ",
+    "note": "单音节；当前 IPA 多标了重音符号",
+    "phones": "M AY1",
+    "variants": {
+      "http": 0.57,
+      "ws": 0.55,
+      "cmu": 0.41,
+      "sentence": 0.12
+    }
+  },
+  "has": {
+    "key": "has",
+    "text": "has",
+    "ipa": "ˈhæz",
+    "note": "单音节；单词卡应读强读 /hæz/",
+    "phones": "HH AE1 Z",
+    "variants": {
+      "http": 0.51,
+      "ws": 0.52,
+      "cmu": 0.3,
+      "sentence": 0.16
+    }
+  },
+  "named": {
+    "key": "named",
+    "text": "named",
+    "ipa": "ˈneɪmd",
+    "note": "单音节；当前 IPA 多标了重音符号",
+    "phones": "N EY1 M D",
+    "variants": {
+      "http": 0.56,
+      "ws": 0.56,
+      "cmu": 0.49,
+      "sentence": 0.24
+    }
+  },
+  "rex": {
+    "key": "rex",
+    "text": "Rex",
+    "ipa": "ˈrɛks",
+    "note": "专有名词、单音节；当前 IPA 多标了重音符号",
+    "phones": "R EH1 K S",
+    "variants": {
+      "http": 0.55,
+      "ws": 0.49,
+      "cmu": 0.57,
+      "sentence": 0.16
+    }
+  },
+  "tabby": {
+    "key": "tabby",
+    "text": "tabby",
+    "ipa": "ˈtæbi",
+    "note": "双音节，重音应在第一音节 TAB-by",
+    "phones": "T AE1 B IY0",
+    "variants": {
+      "http": 0.44,
+      "ws": 0.64,
+      "cmu": 0.47,
+      "sentence": 0.48
+    }
+  },
+  "curly": {
+    "key": "curly",
+    "text": "curly",
+    "ipa": "ˈkɜrli",
+    "note": "双音节，重音应在第一音节 CUR-ly",
+    "phones": "K ER1 L IY0",
+    "variants": {
+      "http": 0.55,
+      "ws": 0.56,
+      "cmu": 0.57,
+      "sentence": 0.4
+    }
+  },
+  "gets": {
+    "key": "gets",
+    "text": "gets",
+    "ipa": "ˈɡɛts",
+    "note": "单音节；当前 IPA 多标了重音符号",
+    "phones": "G EH1 T S",
+    "variants": {
+      "http": 0.41,
+      "ws": 0.44,
+      "cmu": 0.5,
+      "sentence": 0.24
+    }
+  }
+}
